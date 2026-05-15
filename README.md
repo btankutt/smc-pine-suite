@@ -27,7 +27,7 @@ For a more comprehensive confluence system that integrates all four free indicat
 
 | Indicator | Purpose | Status |
 |-----------|---------|--------|
-| [SMC Toolkit](indicators/01-smc-toolkit/) | Order Blocks, FVG, Liquidity Sweeps, BoS/CHoCH | 🚧 Coming Soon |
+| [SMC Toolkit](indicators/01-smc-toolkit/) | Order Blocks, FVG, Liquidity Sweeps, BoS/CHoCH | ✅ Live |
 | [Volume Profile Plus](indicators/02-volume-profile-plus/) | Session-based VP, POC, VAH/VAL, Volume Nodes | 🚧 Coming Soon |
 | [MTF Divergence Scanner](indicators/03-mtf-divergence/) | Multi-timeframe RSI/MACD divergence detection | 🚧 Coming Soon |
 | [ATR Helper](indicators/04-atr-helper/) | Dynamic SL/TP, R:R visualization, position sizing | 🚧 Coming Soon |
@@ -83,10 +83,13 @@ See [docs/trading-philosophy.md](docs/trading-philosophy.md) for the full doctri
 
 ## Roadmap
 
-Planned for this suite:
+Already implemented and shipped:
 
 - [x] Repository structure and documentation framework
-- [ ] SMC Toolkit (Order Blocks + FVG + Liquidity Sweeps + Structure)
+- [x] SMC Toolkit — Order Blocks, FVG, Liquidity Sweeps, BoS/CHoCH ([details](indicators/01-smc-toolkit/))
+
+Planned future additions:
+
 - [ ] Volume Profile Plus (Session-based with POC/VAH/VAL)
 - [ ] MTF Divergence Scanner (RSI/MACD across timeframes)
 - [ ] ATR Helper (Dynamic SL/TP and R:R visualization)

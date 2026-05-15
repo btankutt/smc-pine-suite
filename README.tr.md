@@ -27,7 +27,7 @@ Dört ücretsiz göstergeyi entegre eden daha kapsamlı bir konfluans sistemi i�
 
 | Gösterge | Amaç | Durum |
 |----------|------|-------|
-| [SMC Toolkit](indicators/01-smc-toolkit/) | Order Blocks, Fair Value Gaps (FVG), Likidite Sweep'leri, BoS/CHoCH | 🚧 Yakında |
+| [SMC Toolkit](indicators/01-smc-toolkit/) | Order Blocks, Fair Value Gaps (FVG), Likidite Sweep'leri, BoS/CHoCH | ✅ Canlı |
 | [Volume Profile Plus](indicators/02-volume-profile-plus/) | Seans bazlı VP, POC, VAH/VAL, Hacim Düğümleri | 🚧 Yakında |
 | [MTF Divergence Scanner](indicators/03-mtf-divergence/) | Çoklu zaman dilimi RSI/MACD ıraksaklık tespiti | 🚧 Yakında |
 | [ATR Helper](indicators/04-atr-helper/) | Dinamik SL/TP, R:R görselleştirmesi, pozisyon büyüklüğü | 🚧 Yakında |
@@ -83,10 +83,13 @@ Tam doktrin için [docs/trading-philosophy.md](docs/trading-philosophy.md) — b
 
 ## Yol Haritası
 
-Bu paket için planlananlar:
+Zaten implement edilmiş ve gönderilmiş:
 
 - [x] Repo yapısı ve dokümantasyon iskeleti
-- [ ] SMC Toolkit (Order Blocks + FVG + Likidite Sweep'leri + Yapı)
+- [x] SMC Toolkit — Order Blocks, FVG, Likidite Sweep'leri, BoS/CHoCH ([detaylar](indicators/01-smc-toolkit/))
+
+Planlanmış gelecek eklemeler:
+
 - [ ] Volume Profile Plus (POC/VAH/VAL ile seans bazlı)
 - [ ] MTF Divergence Scanner (Zaman dilimleri arasında RSI/MACD)
 - [ ] ATR Helper (Dinamik SL/TP ve R:R görselleştirmesi)
