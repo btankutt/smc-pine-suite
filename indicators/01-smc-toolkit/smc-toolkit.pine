@@ -1,0 +1,421 @@
+// =============================================================================
+// SMC Toolkit
+// =============================================================================
+// Author:      Baris Tankut (@btankutt)
+// Repository:  https://github.com/btankutt/smc-pine-suite
+// License:     MPL 2.0 (see LICENSE-FREE)
+// Created:     2026-05-15
+// Version:     1.0.0
+// -----------------------------------------------------------------------------
+// Smart Money Concepts toolkit for TradingView:
+//   - Market structure detection (BoS / CHoCH)
+//   - Order Block identification with mitigation tracking
+//   - Fair Value Gap (FVG) detection
+//   - Liquidity level detection and sweep alerts
+//
+// Standard implementations of public-domain SMC concepts. Open source under
+// MPL 2.0 - fork, study, adapt to your strategy.
+//
+// Disclaimer: Educational tool, not financial advice. Past performance does
+// not guarantee future results. Always backtest and use proper risk management.
+// =============================================================================
+
+//@version=6
+indicator("SMC Toolkit [btankutt]", overlay=true, max_boxes_count=500, max_lines_count=500, max_labels_count=500)
+
+// =============================================================================
+// CONSTANTS
+// =============================================================================
+int ATR_LENGTH        = 14
+int VOLUME_SMA_LENGTH = 20
+int OB_LOOKBACK_BARS  = 30
+int PIVOT_BUFFER_SIZE = 10
+
+// Input group names
+GRP_STRUCT = "Structure"
+GRP_OB     = "Order Blocks"
+GRP_FVG    = "Fair Value Gaps"
+GRP_LIQ    = "Liquidity"
+GRP_DISP   = "Display"
+
+// =============================================================================
+// USER INPUTS
+// =============================================================================
+// Group 1 - Structure
+int  swing_length            = input.int(5, "Swing detection length", minval=2, maxval=50, group=GRP_STRUCT)
+bool show_internal_structure = input.bool(false, "Show internal structure", group=GRP_STRUCT)
+bool show_external_structure = input.bool(true,  "Show external structure", group=GRP_STRUCT)
+
+// Group 2 - Order Blocks
+bool  ob_enabled        = input.bool(true,  "Enable Order Blocks", group=GRP_OB)
+int   ob_max_count      = input.int(5, "Max OBs to display", minval=1, maxval=50, group=GRP_OB)
+bool  ob_volume_filter  = input.bool(true, "Filter by volume", group=GRP_OB)
+color ob_bullish_color  = input.color(color.new(color.green, 70), "Bullish OB color", group=GRP_OB)
+color ob_bearish_color  = input.color(color.new(color.red,   70), "Bearish OB color", group=GRP_OB)
+
+// Group 3 - Fair Value Gaps
+bool  fvg_enabled       = input.bool(true, "Enable FVG", group=GRP_FVG)
+int   fvg_max_count     = input.int(5, "Max FVGs to display", minval=1, maxval=50, group=GRP_FVG)
+float fvg_min_size_atr  = input.float(0.5, "Min FVG size (ATR multiplier)", minval=0.1, maxval=5.0, step=0.1, group=GRP_FVG)
+color fvg_bullish_color = input.color(color.new(color.aqua,   80), "Bullish FVG color", group=GRP_FVG)
+color fvg_bearish_color = input.color(color.new(color.orange, 80), "Bearish FVG color", group=GRP_FVG)
+
+// Group 4 - Liquidity
+bool  liq_enabled       = input.bool(true, "Enable Liquidity", group=GRP_LIQ)
+int   liq_lookback      = input.int(50, "Equal highs/lows lookback", minval=10, maxval=200, group=GRP_LIQ)
+float liq_tolerance_atr = input.float(0.2, "Tolerance (ATR multiplier)", minval=0.05, maxval=1.0, step=0.05, group=GRP_LIQ)
+
+// Group 5 - Display
+bool show_labels      = input.bool(true, "Show event labels", group=GRP_DISP)
+int  box_transparency = input.int(70, "Box transparency", minval=0, maxval=100, group=GRP_DISP)
+
+// =============================================================================
+// USER-DEFINED TYPES
+// =============================================================================
+type OrderBlock
+    float top
+    float bottom
+    int   created_at
+    bool  mitigated
+    bool  bullish
+
+type FVG
+    float top
+    float bottom
+    int   created_at
+    bool  filled
+    bool  bullish
+
+type LiquidityLevel
+    float price
+    int   created_at
+    bool  swept
+    bool  is_bsl
+
+// =============================================================================
+// STATE
+// =============================================================================
+// Tracked SMC objects (logical state)
+var array<OrderBlock>     obs  = array.new<OrderBlock>()
+var array<FVG>            fvgs = array.new<FVG>()
+var array<LiquidityLevel> liqs = array.new<LiquidityLevel>()
+
+// Parallel arrays for visual handles (kept in lockstep with the logical arrays).
+// This avoids polluting the UDT spec with rendering concerns.
+var array<box>  ob_boxes  = array.new<box>()
+var array<box>  fvg_boxes = array.new<box>()
+var array<line> liq_lines = array.new<line>()
+
+// Most recent confirmed swing levels
+var float last_swing_high     = na
+var int   last_swing_high_bar = na
+var float last_swing_low      = na
+var int   last_swing_low_bar  = na
+
+// "Has the last confirmed swing been broken?" — prevents re-firing BoS/CHoCH
+// every bar while close remains beyond the swing.
+var bool broke_last_high = false
+var bool broke_last_low  = false
+
+// Current structural trend
+// trend_initialized = false until the FIRST break (BoS/CHoCH detection only valid after)
+// is_bullish        = direction of the current trend (only meaningful when trend_initialized)
+var bool trend_initialized = false
+var bool is_bullish        = false
+
+// Recent pivot prices, used for equal-highs/lows liquidity detection.
+var array<float> recent_ph_prices = array.new<float>()
+var array<float> recent_pl_prices = array.new<float>()
+
+// Alert flags, reset each bar
+bool bos_bullish   = false
+bool bos_bearish   = false
+bool choch_bullish = false
+bool choch_bearish = false
+bool bsl_swept     = false
+bool ssl_swept     = false
+
+// Volatility + volume context
+float atr_value     = ta.atr(ATR_LENGTH)
+float vol_sma_value = ta.sma(volume, VOLUME_SMA_LENGTH)
+
+// =============================================================================
+// SECTION 1 — Swing detection
+// =============================================================================
+// Note: ta.pivothigh/pivotlow returns the pivot value `swing_length` bars
+// AFTER it actually formed. This `swing_length` bar confirmation delay is
+// required to avoid lookahead bias — adjust swing_length to balance
+// responsiveness vs stability.
+float ph = ta.pivothigh(swing_length, swing_length)
+float pl = ta.pivotlow(swing_length, swing_length)
+
+if not na(ph)
+    last_swing_high     := ph
+    last_swing_high_bar := bar_index - swing_length
+    broke_last_high     := false
+
+if not na(pl)
+    last_swing_low      := pl
+    last_swing_low_bar  := bar_index - swing_length
+    broke_last_low      := false
+
+// =============================================================================
+// SECTION 2 — Structure (BoS / CHoCH)
+// =============================================================================
+// A break only fires the FIRST time close exceeds the last swing. The
+// per-swing "broke_last_*" flag is reset whenever a new pivot is confirmed.
+bool break_up   = false
+bool break_down = false
+
+if not na(last_swing_high) and close > last_swing_high and not broke_last_high
+    break_up        := true
+    broke_last_high := true
+
+if not na(last_swing_low) and close < last_swing_low and not broke_last_low
+    break_down     := true
+    broke_last_low := true
+
+// First break establishes the initial trend direction.
+if not trend_initialized and (break_up or break_down)
+    is_bullish        := break_up
+    trend_initialized := true
+
+if trend_initialized
+    if break_up
+        if is_bullish
+            bos_bullish := true
+        else
+            choch_bullish := true
+            is_bullish    := true
+        if show_external_structure and show_labels
+            label.new(bar_index, high, choch_bullish ? "CHoCH" : "BoS",
+                yloc=yloc.abovebar,
+                style=label.style_label_down,
+                color=color.new(color.green, 50),
+                textcolor=color.white,
+                size=size.tiny)
+
+    if break_down
+        if is_bullish
+            choch_bearish := true
+            is_bullish    := false
+        else
+            bos_bearish := true
+        if show_external_structure and show_labels
+            label.new(bar_index, low, choch_bearish ? "CHoCH" : "BoS",
+                yloc=yloc.belowbar,
+                style=label.style_label_up,
+                color=color.new(color.red, 50),
+                textcolor=color.white,
+                size=size.tiny)
+
+// =============================================================================
+// SECTION 3 — Order Block Detection
+// =============================================================================
+// When a break of structure occurs, the LAST opposite-color candle before
+// the break is the order block. Optional volume filter excludes low-volume
+// candles that historically produce weaker zones.
+
+if ob_enabled and break_up
+    int found_bar = -1
+    for i = 1 to OB_LOOKBACK_BARS
+        if close[i] < open[i]
+            found_bar := i
+            break
+    if found_bar > 0
+        if not ob_volume_filter or volume[found_bar] > vol_sma_value[found_bar]
+            color bg = color.new(ob_bullish_color, box_transparency)
+            box new_box = box.new(left=bar_index - found_bar, top=high[found_bar],
+                                  right=bar_index, bottom=low[found_bar],
+                                  border_color=ob_bullish_color, bgcolor=bg,
+                                  extend=extend.right)
+            obs.push(OrderBlock.new(high[found_bar], low[found_bar], time[found_bar], false, true))
+            ob_boxes.push(new_box)
+            while obs.size() > ob_max_count
+                obs.shift()
+                box dropped = ob_boxes.shift()
+                if not na(dropped)
+                    dropped.delete()
+
+if ob_enabled and break_down
+    int found_bar = -1
+    for i = 1 to OB_LOOKBACK_BARS
+        if close[i] > open[i]
+            found_bar := i
+            break
+    if found_bar > 0
+        if not ob_volume_filter or volume[found_bar] > vol_sma_value[found_bar]
+            color bg = color.new(ob_bearish_color, box_transparency)
+            box new_box = box.new(left=bar_index - found_bar, top=high[found_bar],
+                                  right=bar_index, bottom=low[found_bar],
+                                  border_color=ob_bearish_color, bgcolor=bg,
+                                  extend=extend.right)
+            obs.push(OrderBlock.new(high[found_bar], low[found_bar], time[found_bar], false, false))
+            ob_boxes.push(new_box)
+            while obs.size() > ob_max_count
+                obs.shift()
+                box dropped = ob_boxes.shift()
+                if not na(dropped)
+                    dropped.delete()
+
+// Mitigation: each bar, mark and recolor any OB whose range is touched.
+if obs.size() > 0
+    for i = 0 to obs.size() - 1
+        OrderBlock ob = obs.get(i)
+        if not ob.mitigated
+            bool hit = ob.bullish ? (low <= ob.top) : (high >= ob.bottom)
+            if hit
+                ob.mitigated := true
+                box ref = ob_boxes.get(i)
+                if not na(ref)
+                    ref.set_bgcolor(color.new(color.gray, 90))
+                    ref.set_border_color(color.gray)
+
+// =============================================================================
+// SECTION 4 — Fair Value Gap
+// =============================================================================
+// A 3-candle gap pattern. Filter by ATR multiplier to skip noise-sized gaps.
+
+if fvg_enabled and bar_index > 2
+    float min_size = atr_value * fvg_min_size_atr
+
+    // Bullish FVG: current low is above the high two bars back.
+    if low > high[2] and (low - high[2]) >= min_size
+        color bg = color.new(fvg_bullish_color, box_transparency)
+        box bnew = box.new(left=bar_index - 1, top=low, right=bar_index, bottom=high[2],
+                           border_color=fvg_bullish_color, bgcolor=bg, extend=extend.right)
+        fvgs.push(FVG.new(low, high[2], time[1], false, true))
+        fvg_boxes.push(bnew)
+        while fvgs.size() > fvg_max_count
+            fvgs.shift()
+            box dropped = fvg_boxes.shift()
+            if not na(dropped)
+                dropped.delete()
+
+    // Bearish FVG: current high is below the low two bars back.
+    if high < low[2] and (low[2] - high) >= min_size
+        color bg = color.new(fvg_bearish_color, box_transparency)
+        box bnew = box.new(left=bar_index - 1, top=low[2], right=bar_index, bottom=high,
+                           border_color=fvg_bearish_color, bgcolor=bg, extend=extend.right)
+        fvgs.push(FVG.new(low[2], high, time[1], false, false))
+        fvg_boxes.push(bnew)
+        while fvgs.size() > fvg_max_count
+            fvgs.shift()
+            box dropped = fvg_boxes.shift()
+            if not na(dropped)
+                dropped.delete()
+
+// Fill check: any new bar touching the gap range marks it as filled.
+if fvgs.size() > 0
+    for i = 0 to fvgs.size() - 1
+        FVG g = fvgs.get(i)
+        if not g.filled
+            bool hit = g.bullish ? (low <= g.top) : (high >= g.bottom)
+            if hit
+                g.filled := true
+                box ref = fvg_boxes.get(i)
+                if not na(ref)
+                    ref.set_bgcolor(color.new(color.gray, 90))
+                    ref.set_border_color(color.gray)
+
+// =============================================================================
+// SECTION 5 — Liquidity
+// =============================================================================
+// Equal-highs / equal-lows form liquidity pools.
+// Buy-side liquidity (BSL): equal highs, where stop-losses from short
+// positions cluster above price.
+// Sell-side liquidity (SSL): equal lows, where stop-losses from long
+// positions cluster below price.
+// A new pivot within ATR-scaled tolerance of any prior pivot in the buffer
+// counts as a liquidity level. liq_lookback bounds the historical window
+// via PIVOT_BUFFER_SIZE; tolerance scales with volatility.
+
+if liq_enabled and not na(ph)
+    bool equal = false
+    if recent_ph_prices.size() > 0
+        for i = 0 to recent_ph_prices.size() - 1
+            if math.abs(ph - recent_ph_prices.get(i)) <= atr_value * liq_tolerance_atr
+                equal := true
+                break
+    if equal
+        line new_line = line.new(bar_index - swing_length, ph,
+                                 bar_index, ph,
+                                 extend=extend.right,
+                                 color=color.new(color.aqua, 30),
+                                 style=line.style_dashed,
+                                 width=1)
+        liqs.push(LiquidityLevel.new(ph, time[swing_length], false, true))
+        liq_lines.push(new_line)
+        while liqs.size() > (ob_max_count + fvg_max_count)
+            liqs.shift()
+            line dropped = liq_lines.shift()
+            if not na(dropped)
+                dropped.delete()
+    recent_ph_prices.push(ph)
+    if recent_ph_prices.size() > PIVOT_BUFFER_SIZE
+        recent_ph_prices.shift()
+
+if liq_enabled and not na(pl)
+    bool equal = false
+    if recent_pl_prices.size() > 0
+        for i = 0 to recent_pl_prices.size() - 1
+            if math.abs(pl - recent_pl_prices.get(i)) <= atr_value * liq_tolerance_atr
+                equal := true
+                break
+    if equal
+        line new_line = line.new(bar_index - swing_length, pl,
+                                 bar_index, pl,
+                                 extend=extend.right,
+                                 color=color.new(color.orange, 30),
+                                 style=line.style_dashed,
+                                 width=1)
+        liqs.push(LiquidityLevel.new(pl, time[swing_length], false, false))
+        liq_lines.push(new_line)
+        while liqs.size() > (ob_max_count + fvg_max_count)
+            liqs.shift()
+            line dropped = liq_lines.shift()
+            if not na(dropped)
+                dropped.delete()
+    recent_pl_prices.push(pl)
+    if recent_pl_prices.size() > PIVOT_BUFFER_SIZE
+        recent_pl_prices.shift()
+
+// Sweep: a wick beyond the level followed by a close back inside.
+if liqs.size() > 0
+    for i = 0 to liqs.size() - 1
+        LiquidityLevel lvl = liqs.get(i)
+        if not lvl.swept
+            if lvl.is_bsl
+                // Buy-side liquidity (above price). Sweep = wick over + close under.
+                if high > lvl.price and close < lvl.price
+                    lvl.swept := true
+                    bsl_swept := true
+                    if show_labels
+                        label.new(bar_index, high, "BSL Swept",
+                            yloc=yloc.abovebar,
+                            style=label.style_label_down,
+                            color=color.new(color.red, 30),
+                            textcolor=color.white,
+                            size=size.tiny)
+            else
+                // Sell-side liquidity (below price). Sweep = wick under + close over.
+                if low < lvl.price and close > lvl.price
+                    lvl.swept := true
+                    ssl_swept := true
+                    if show_labels
+                        label.new(bar_index, low, "SSL Swept",
+                            yloc=yloc.belowbar,
+                            style=label.style_label_up,
+                            color=color.new(color.green, 30),
+                            textcolor=color.white,
+                            size=size.tiny)
+
+// =============================================================================
+// ALERTS
+// =============================================================================
+alertcondition(bos_bullish,   "BoS Bullish",   "Bullish break of structure detected")
+alertcondition(bos_bearish,   "BoS Bearish",   "Bearish break of structure detected")
+alertcondition(choch_bullish, "CHoCH Bullish", "Bullish change of character detected")
+alertcondition(choch_bearish, "CHoCH Bearish", "Bearish change of character detected")
+alertcondition(bsl_swept,     "BSL Swept",     "Buy-side liquidity swept")
+alertcondition(ssl_swept,     "SSL Swept",     "Sell-side liquidity swept")
