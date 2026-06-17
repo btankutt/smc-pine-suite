@@ -1,0 +1,242 @@
+// =============================================================================
+// Volume Profile Plus
+// =============================================================================
+// Author:      Baris Tankut (@btankutt)
+// Repository:  https://github.com/btankutt/smc-pine-suite
+// License:     MPL 2.0 (see LICENSE-FREE)
+// Created:     2026-06-17
+// Version:     1.0.0
+// -----------------------------------------------------------------------------
+// Session-based (or fixed-lookback) Volume Profile for TradingView:
+//   - Horizontal volume histogram across price bins
+//   - Point of Control (POC) - the highest-volume price level
+//   - Value Area High / Low (VAH / VAL) - the configurable % of volume
+//   - High / Low Volume Node (HVN / LVN) highlighting
+//
+// The profile is recomputed on the most recent bar from either the active
+// session (anchored to a higher timeframe) or a fixed lookback window. Volume
+// of each bar is distributed evenly across the price bins its range spans.
+//
+// Disclaimer: Educational tool, not financial advice. Past performance does
+// not guarantee future results. Always backtest and use proper risk management.
+// =============================================================================
+
+//@version=6
+indicator("Volume Profile Plus [btankutt]", overlay=true, max_boxes_count=500, max_lines_count=500, max_labels_count=500)
+
+// =============================================================================
+// CONSTANTS
+// =============================================================================
+int   POC_LABEL_OFFSET = 3   // bars to the right of the histogram for value labels
+float MIN_BAR_WIDTH    = 1.0 // minimum histogram bar width (in bars)
+
+// Input group names
+GRP_CALC = "Calculation"
+GRP_NODE = "Volume Nodes"
+GRP_DISP = "Display"
+
+// =============================================================================
+// USER INPUTS
+// =============================================================================
+// Group 1 - Calculation
+string calc_mode  = input.string("Session", "Profile range", options=["Session", "Fixed lookback"], group=GRP_CALC)
+string anchor_tf  = input.timeframe("D", "Session anchor timeframe", group=GRP_CALC, tooltip="Higher timeframe that defines one session, e.g. D (daily), W (weekly).")
+int    lookback   = input.int(200, "Fixed lookback (bars)", minval=20, maxval=5000, group=GRP_CALC)
+int    num_rows   = input.int(50, "Number of rows", minval=10, maxval=200, group=GRP_CALC, tooltip="More rows = finer price resolution, slower compute.")
+float  va_pct     = input.float(70.0, "Value Area (%)", minval=50.0, maxval=95.0, step=1.0, group=GRP_CALC)
+
+// Group 2 - Volume Nodes
+bool  node_enabled = input.bool(true, "Highlight HVN / LVN", group=GRP_NODE)
+float hvn_pct      = input.float(80.0, "HVN threshold (% of POC volume)", minval=50.0, maxval=100.0, step=5.0, group=GRP_NODE)
+float lvn_pct      = input.float(20.0, "LVN threshold (% of POC volume)", minval=1.0,  maxval=50.0,  step=5.0, group=GRP_NODE)
+
+// Group 3 - Display
+int   prof_width   = input.int(80, "Profile width (bars)", minval=10, maxval=300, group=GRP_DISP)
+bool  show_poc     = input.bool(true, "Show POC line", group=GRP_DISP)
+bool  show_va      = input.bool(true, "Show Value Area (VAH/VAL)", group=GRP_DISP)
+bool  show_va_fill = input.bool(true, "Shade Value Area", group=GRP_DISP)
+bool  show_labels  = input.bool(true, "Show price labels", group=GRP_DISP)
+color body_color   = input.color(color.new(color.blue, 60),   "Profile color", group=GRP_DISP)
+color va_color     = input.color(color.new(color.blue, 40),   "Value Area color", group=GRP_DISP)
+color hvn_color    = input.color(color.new(color.green, 30),  "HVN color", group=GRP_DISP)
+color lvn_color    = input.color(color.new(color.red, 50),    "LVN color", group=GRP_DISP)
+color poc_color    = input.color(color.new(color.orange, 0),  "POC color", group=GRP_DISP)
+
+// =============================================================================
+// STATE
+// =============================================================================
+// Visual handles, cleared and redrawn each time the profile is recomputed.
+var array<box>   hist_boxes   = array.new<box>()
+var array<line>  level_lines  = array.new<line>()
+var array<label> level_labels = array.new<label>()
+var box          va_box       = na
+
+// Session anchoring. session_start_index tracks the bar where the current
+// anchor period began, so the profile spans exactly one session.
+int  anchor_time = time(anchor_tf)
+bool new_period  = na(anchor_time[1]) or anchor_time != anchor_time[1]
+var int session_start_index = bar_index
+if new_period
+    session_start_index := bar_index
+
+// =============================================================================
+// HELPERS
+// =============================================================================
+// Remove every drawing from the previous recompute so the chart never stacks
+// stale profiles on top of fresh ones.
+clear_drawings() =>
+    if hist_boxes.size() > 0
+        for b in hist_boxes
+            b.delete()
+        hist_boxes.clear()
+    if level_lines.size() > 0
+        for l in level_lines
+            l.delete()
+        level_lines.clear()
+    if level_labels.size() > 0
+        for lb in level_labels
+            lb.delete()
+        level_labels.clear()
+    if not na(va_box)
+        va_box.delete()
+        va_box := na
+
+// =============================================================================
+// MAIN — recompute the profile on the latest bar only
+// =============================================================================
+// Computing on barstate.islast keeps the loop cost bounded (it runs once per
+// realtime update instead of on every historical bar) which is the standard
+// pattern for volume-profile drawing scripts.
+if barstate.islast
+    clear_drawings()
+
+    // How many bars back does the profile reach?
+    int span_bars = calc_mode == "Session" ? (bar_index - session_start_index) : math.min(lookback, bar_index)
+    span_bars := math.max(span_bars, 1)
+
+    // Pass 1 — establish the price range over the window.
+    float hi = high
+    float lo = low
+    for i = 0 to span_bars
+        hi := math.max(hi, high[i])
+        lo := math.min(lo, low[i])
+
+    float price_range = hi - lo
+    if price_range > 0
+        float row_h = price_range / num_rows
+        array<float> bins = array.new<float>(num_rows, 0.0)
+
+        // Pass 2 — distribute each bar's volume across the rows its range spans.
+        for i = 0 to span_bars
+            int lo_row = int(math.floor((low[i]  - lo) / row_h))
+            int hi_row = int(math.floor((high[i] - lo) / row_h))
+            lo_row := math.max(0, math.min(num_rows - 1, lo_row))
+            hi_row := math.max(0, math.min(num_rows - 1, hi_row))
+            int   touched = hi_row - lo_row + 1
+            float v_share = volume[i] / touched
+            for r = lo_row to hi_row
+                bins.set(r, bins.get(r) + v_share)
+
+        // Locate the Point of Control (row with the most volume) and total.
+        int   poc_row   = 0
+        float poc_vol   = 0.0
+        float total_vol = 0.0
+        for r = 0 to num_rows - 1
+            float v = bins.get(r)
+            total_vol += v
+            if v > poc_vol
+                poc_vol := v
+                poc_row := r
+
+        // Expand outward from the POC until the Value Area % of volume is
+        // captured, always absorbing the heavier of the two neighbouring rows.
+        float va_target = total_vol * va_pct / 100.0
+        float va_vol    = bins.get(poc_row)
+        int   up_row    = poc_row
+        int   dn_row    = poc_row
+        while va_vol < va_target and (up_row < num_rows - 1 or dn_row > 0)
+            float up_vol = up_row < num_rows - 1 ? bins.get(up_row + 1) : -1.0
+            float dn_vol = dn_row > 0            ? bins.get(dn_row - 1) : -1.0
+            if up_vol >= dn_vol
+                up_row += 1
+                va_vol += up_vol
+            else
+                dn_row -= 1
+                va_vol += dn_vol
+
+        float poc_price = lo + (poc_row + 0.5) * row_h
+        float vah_price = lo + (up_row + 1) * row_h
+        float val_price = lo + dn_row * row_h
+
+        int left_x  = bar_index - span_bars
+        int right_x = bar_index + 2
+
+        // --- Histogram bars -------------------------------------------------
+        for r = 0 to num_rows - 1
+            float v = bins.get(r)
+            if v > 0
+                float w_f = prof_width * v / poc_vol
+                int   w   = math.max(int(math.round(w_f)), int(MIN_BAR_WIDTH))
+                float y_bottom = lo + r * row_h
+                float y_top    = y_bottom + row_h
+
+                bool in_va = r >= dn_row and r <= up_row
+                color c = body_color
+                if node_enabled and v >= poc_vol * hvn_pct / 100.0
+                    c := hvn_color
+                else if node_enabled and v <= poc_vol * lvn_pct / 100.0
+                    c := lvn_color
+                else if in_va
+                    c := va_color
+
+                box bx = box.new(left=right_x, top=y_top, right=right_x + w, bottom=y_bottom,
+                                 border_color=color.new(c, 100), bgcolor=c)
+                hist_boxes.push(bx)
+
+        // --- Value Area shading --------------------------------------------
+        if show_va_fill
+            va_box := box.new(left=left_x, top=vah_price, right=right_x, bottom=val_price,
+                              border_color=color.new(va_color, 100),
+                              bgcolor=color.new(va_color, 90))
+
+        // --- POC / VAH / VAL lines -----------------------------------------
+        if show_poc
+            line poc_line = line.new(left_x, poc_price, right_x, poc_price,
+                                     color=poc_color, width=2, style=line.style_solid)
+            level_lines.push(poc_line)
+            if show_labels
+                label poc_lbl = label.new(right_x + POC_LABEL_OFFSET, poc_price,
+                                          "POC " + str.tostring(poc_price, format.mintick),
+                                          style=label.style_label_left, color=poc_color,
+                                          textcolor=color.white, size=size.small)
+                level_labels.push(poc_lbl)
+
+        if show_va
+            line vah_line = line.new(left_x, vah_price, right_x, vah_price,
+                                     color=va_color, width=1, style=line.style_dashed)
+            line val_line = line.new(left_x, val_price, right_x, val_price,
+                                     color=va_color, width=1, style=line.style_dashed)
+            level_lines.push(vah_line)
+            level_lines.push(val_line)
+            if show_labels
+                label vah_lbl = label.new(right_x + POC_LABEL_OFFSET, vah_price,
+                                          "VAH " + str.tostring(vah_price, format.mintick),
+                                          style=label.style_label_left, color=color.new(va_color, 0),
+                                          textcolor=color.white, size=size.small)
+                label val_lbl = label.new(right_x + POC_LABEL_OFFSET, val_price,
+                                          "VAL " + str.tostring(val_price, format.mintick),
+                                          style=label.style_label_left, color=color.new(va_color, 0),
+                                          textcolor=color.white, size=size.small)
+                level_labels.push(vah_lbl)
+                level_labels.push(val_lbl)
+
+// =============================================================================
+// ALERTS
+// =============================================================================
+// Fire when price crosses the most recent POC. The POC level is tracked in a
+// persistent variable updated during the draw pass (first pushed line = POC).
+var float alert_poc = na
+if barstate.islast and level_lines.size() > 0 and show_poc
+    alert_poc := line.get_y1(level_lines.get(0))
+
+alertcondition(not na(alert_poc) and ta.cross(close, alert_poc), "Price crossed POC", "Price crossed the Point of Control")
