@@ -77,8 +77,8 @@ A bottom-right table lists ATR, entry, stop, risk distance, R:R, risk amount, an
 - `Value per 1.0 price move (per unit)` (default: 1.0)
 
 ### Display
-- `Extend lines (bars)` (default: 40)
 - `Show summary table`, colors, and `Zone transparency`
+- Entry / stop / target lines extend to the right as stable horizontal rays (no scroll/zoom drift)
 
 ---
 
@@ -119,4 +119,4 @@ This indicator is provided **as is**, without any guarantee of profitability or 
 **Barış Tankut** ([@btankutt](https://github.com/btankutt))
 Algorithmic Trading Systems & IoT Embedded Engineer
 
-Part of [SMC Pine Suite](../../README.md) — production-grade Pine Script v6 indicators.
+Part of [SMC Pine Suite](../.

@@ -5,7 +5,7 @@
 // Repository:  https://github.com/btankutt/smc-pine-suite
 // License:     MPL 2.0 (see LICENSE-FREE)
 // Created:     2026-06-17
-// Version:     1.0.1
+// Version:     1.0.2
 // -----------------------------------------------------------------------------
 // Session-based (or fixed-lookback) Volume Profile for TradingView:
 //   - Horizontal volume histogram across price bins
@@ -13,12 +13,11 @@
 //   - Value Area High / Low (VAH / VAL) - the configurable % of volume
 //   - High / Low Volume Node (HVN / LVN) highlighting
 //
-// The profile is recomputed on the most recent bar from either the active
-// session (anchored to a higher timeframe) or a fixed lookback window. Volume
-// of each bar is distributed evenly across the price bins its range spans.
-//
-// All drawings use time-based coordinates (xloc.bar_time) so they stay anchored
-// to the chart when you scroll or zoom.
+// The profile is recomputed on the most recent bar. All drawings are anchored
+// to real bars (never to future bar offsets) and the level lines use
+// extend.right, so nothing drifts when you scroll or zoom — the same approach
+// used by the SMC Toolkit. The histogram is drawn over the most recent bars,
+// growing left from the last bar.
 //
 // Disclaimer: Educational tool, not financial advice. Past performance does
 // not guarantee future results. Always backtest and use proper risk management.
@@ -30,8 +29,7 @@ indicator("Volume Profile Plus [btankutt]", overlay=true, max_boxes_count=500, m
 // =============================================================================
 // CONSTANTS
 // =============================================================================
-int   POC_LABEL_OFFSET = 3   // bars to the right of the histogram for value labels
-float MIN_BAR_WIDTH    = 1.0 // minimum histogram bar width (in bars)
+float MIN_BAR_WIDTH = 1.0 // minimum histogram bar width (in bars)
 
 // Input group names
 GRP_CALC = "Calculation"
@@ -54,7 +52,7 @@ float hvn_pct      = input.float(80.0, "HVN threshold (% of POC volume)", minval
 float lvn_pct      = input.float(20.0, "LVN threshold (% of POC volume)", minval=1.0,  maxval=50.0,  step=5.0, group=GRP_NODE)
 
 // Group 3 - Display
-int   prof_width   = input.int(80, "Profile width (bars)", minval=10, maxval=300, group=GRP_DISP)
+int   prof_width   = input.int(60, "Profile width (bars)", minval=10, maxval=300, group=GRP_DISP, tooltip="How many bars wide the histogram is, drawn left from the last bar.")
 bool  show_poc     = input.bool(true, "Show POC line", group=GRP_DISP)
 bool  show_va      = input.bool(true, "Show Value Area (VAH/VAL)", group=GRP_DISP)
 bool  show_va_fill = input.bool(true, "Shade Value Area", group=GRP_DISP)
@@ -85,11 +83,9 @@ if new_period
 // =============================================================================
 // MAIN — recompute the profile on the latest bar only
 // =============================================================================
-// Computing on barstate.islast keeps the loop cost bounded (it runs once per
-// realtime update instead of on every historical bar) which is the standard
-// pattern for volume-profile drawing scripts. The clearing logic is inlined
-// here (not in a function) because Pine v6 forbids reassigning a global
-// variable such as `va_box` from inside a user-defined function.
+// Computing on barstate.islast keeps the loop cost bounded. The clearing logic
+// is inlined here (not in a function) because Pine v6 forbids reassigning a
+// global variable such as `va_box` from inside a user-defined function.
 if barstate.islast
     // --- Clear the previous recompute's drawings ---
     if hist_boxes.size() > 0
@@ -166,14 +162,13 @@ if barstate.islast
         float vah_price = lo + (up_row + 1) * row_h
         float val_price = lo + dn_row * row_h
 
-        // Time-based x anchors (stable on scroll/zoom). left_t is the window's
-        // start bar; base_t is two bars to the right of the last bar; widths
-        // are expressed in bar-durations via tf_ms.
-        int tf_ms  = timeframe.in_seconds(timeframe.period) * 1000
-        int left_t = time[span_bars]
-        int base_t = time + 2 * tf_ms
+        // X anchors — REAL bars only (no future offsets). right_x is the last
+        // bar; left_x is the window start. Lines use extend.right to become
+        // stable horizontal rays; the histogram grows left from the last bar.
+        int right_x = bar_index
+        int left_x  = bar_index - span_bars
 
-        // --- Histogram bars -------------------------------------------------
+        // --- Histogram bars (over the most recent bars, growing left) -------
         for r = 0 to num_rows - 1
             float v = bins.get(r)
             if v > 0
@@ -191,48 +186,54 @@ if barstate.islast
                 else if in_va
                     c := va_color
 
-                box bx = box.new(base_t, y_top, base_t + w * tf_ms, y_bottom,
-                                 xloc=xloc.bar_time, border_color=color.new(c, 100), bgcolor=c)
+                box bx = box.new(left=right_x - w, top=y_top, right=right_x, bottom=y_bottom,
+                                 border_color=color.new(c, 100), bgcolor=c)
                 hist_boxes.push(bx)
 
-        // --- Value Area shading --------------------------------------------
+        // --- Value Area shading (over the analyzed range) ------------------
         if show_va_fill
-            va_box := box.new(left_t, vah_price, base_t, val_price,
-                              xloc=xloc.bar_time,
+            va_box := box.new(left=left_x, top=vah_price, right=right_x, bottom=val_price,
                               border_color=color.new(va_color, 100),
-                              bgcolor=color.new(va_color, 90))
+                              bgcolor=color.new(va_color, 92))
 
-        // --- POC / VAH / VAL lines -----------------------------------------
+        // --- POC / VAH / VAL as horizontal rays (extend.right = stable) ----
         if show_poc
-            line poc_line = line.new(left_t, poc_price, base_t, poc_price,
-                                     xloc=xloc.bar_time, color=poc_color, width=2, style=line.style_solid)
+            line poc_line = line.new(left_x, poc_price, right_x, poc_price,
+                                     extend=extend.right, color=poc_color, width=2, style=line.style_solid)
             level_lines.push(poc_line)
             if show_labels
-                label poc_lbl = label.new(base_t + POC_LABEL_OFFSET * tf_ms, poc_price,
+                label poc_lbl = label.new(right_x, poc_price,
                                           "POC " + str.tostring(poc_price, format.mintick),
-                                          xloc=xloc.bar_time, style=label.style_label_left, color=poc_color,
+                                          style=label.style_label_left, color=poc_color,
                                           textcolor=color.white, size=size.small)
                 level_labels.push(poc_lbl)
 
         if show_va
-            line vah_line = line.new(left_t, vah_price, base_t, vah_price,
-                                     xloc=xloc.bar_time, color=va_color, width=1, style=line.style_dashed)
-            line val_line = line.new(left_t, val_price, base_t, val_price,
-                                     xloc=xloc.bar_time, color=va_color, width=1, style=line.style_dashed)
+            line vah_line = line.new(left_x, vah_price, right_x, vah_price,
+                                     extend=extend.right, color=va_color, width=1, style=line.style_dashed)
+            line val_line = line.new(left_x, val_price, right_x, val_price,
+                                     extend=extend.right, color=va_color, width=1, style=line.style_dashed)
             level_lines.push(vah_line)
             level_lines.push(val_line)
             if show_labels
-                label vah_lbl = label.new(base_t + POC_LABEL_OFFSET * tf_ms, vah_price,
+                label vah_lbl = label.new(right_x, vah_price,
                                           "VAH " + str.tostring(vah_price, format.mintick),
-                                          xloc=xloc.bar_time, style=label.style_label_left, color=color.new(va_color, 0),
+                                          style=label.style_label_left, color=color.new(va_color, 0),
                                           textcolor=color.white, size=size.small)
-                label val_lbl = label.new(base_t + POC_LABEL_OFFSET * tf_ms, val_price,
+                label val_lbl = label.new(right_x, val_price,
                                           "VAL " + str.tostring(val_price, format.mintick),
-                                          xloc=xloc.bar_time, style=label.style_label_left, color=color.new(va_color, 0),
+                                          style=label.style_label_left, color=color.new(va_color, 0),
                                           textcolor=color.white, size=size.small)
                 level_labels.push(vah_lbl)
                 level_labels.push(val_lbl)
 
 // =============================================================================
 // ALERTS
-// ===================================
+// =============================================================================
+// Fire when price crosses the most recent POC. The POC level is tracked in a
+// persistent variable updated during the draw pass (first pushed line = POC).
+var float alert_poc = na
+if barstate.islast and level_lines.size() > 0 and show_poc
+    alert_poc := line.get_y1(level_lines.get(0))
+
+alertcondition(not na(alert_poc

@@ -79,8 +79,8 @@ Sağ alttaki tablo ATR, giriş, stop, risk mesafesi, R:R, risk tutarı ve pozisy
 - `Value per 1.0 price move (per unit)` (varsayılan: 1.0)
 
 ### Görüntü
-- `Extend lines (bars)` (varsayılan: 40)
 - `Show summary table`, renkler ve `Zone transparency`
+- Giriş / stop / hedef çizgileri sağa doğru sabit yatay ışın olarak uzar (kaydırma/zoom'da kaymaz)
 
 ---
 
@@ -121,4 +121,4 @@ Bu gösterge **olduğu gibi** sağlanır, kârlılık veya doğruluk garantisi y
 **Barış Tankut** ([@btankutt](https://github.com/btankutt))
 Algoritmik Ticaret Sistemleri & IoT Gömülü Mühendis
 
-[SMC Pine Suite](../../README.tr.md)'in parçası — üretim sınıfı Pine Script v6 göstergeleri.
+[SMC Pine Suite](../../README.tr.md)'
