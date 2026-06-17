@@ -5,7 +5,7 @@
 // Repository:  https://github.com/btankutt/smc-pine-suite
 // License:     MPL 2.0 (see LICENSE-FREE)
 // Created:     2026-06-17
-// Version:     1.0.0
+// Version:     1.0.1
 // -----------------------------------------------------------------------------
 // ATR-based trade planning tool for TradingView:
 //   - Dynamic stop-loss from an ATR multiple
@@ -119,11 +119,12 @@ clear_plan() =>
             lb.delete()
         plan_labels.clear()
 
-// Draw a level line plus a price label.
+// Draw a level line plus a price label. x1/x2 are timestamps (xloc.bar_time)
+// so the lines stay anchored to the chart when scrolling or zooming.
 draw_level(int x1, int x2, float price, color col, string txt) =>
-    line ln = line.new(x1, price, x2, price, color=col, width=2, style=line.style_solid)
+    line ln = line.new(x1, price, x2, price, xloc=xloc.bar_time, color=col, width=2, style=line.style_solid)
     plan_lines.push(ln)
-    label lb = label.new(x2, price, txt, style=label.style_label_left,
+    label lb = label.new(x2, price, txt, xloc=xloc.bar_time, style=label.style_label_left,
                          color=col, textcolor=color.white, size=size.small)
     plan_labels.push(lb)
 
@@ -132,11 +133,13 @@ draw_level(int x1, int x2, float price, color col, string txt) =>
 // =============================================================================
 if barstate.islast and stop_dist > 0
     clear_plan()
-    int x1 = bar_index
-    int x2 = bar_index + extend_bars
+    int tf_ms = timeframe.in_seconds(timeframe.period) * 1000
+    int x1 = time
+    int x2 = time + extend_bars * tf_ms
 
     // Risk zone (entry -> stop), shaded red.
     box risk_box = box.new(x1, entry, x2, sl_price,
+                           xloc=xloc.bar_time,
                            border_color=color.new(sl_color, 100),
                            bgcolor=color.new(sl_color, zone_transp))
     plan_boxes.push(risk_box)
@@ -144,6 +147,7 @@ if barstate.islast and stop_dist > 0
     // Reward zone (entry -> furthest enabled target), shaded green.
     float top_tp = tp3_on ? tp3_price : tp2_on ? tp2_price : tp1_on ? tp1_price : entry
     box reward_box = box.new(x1, entry, x2, top_tp,
+                             xloc=xloc.bar_time,
                              border_color=color.new(tp_color, 100),
                              bgcolor=color.new(tp_color, zone_transp))
     plan_boxes.push(reward_box)
@@ -180,7 +184,4 @@ if show_table and barstate.islast and stop_dist > 0
 
 // =============================================================================
 // ALERTS
-// =============================================================================
-// Fire when price reaches the planned stop or first target.
-alertcondition(ta.cross(close, sl_price),  "Stop hit",   "Price reached the planned stop-loss")
-alertcondition(ta.cross(close, tp1_price), "TP1 hit",    "Price reached the first take-profit target")
+// ===================================
