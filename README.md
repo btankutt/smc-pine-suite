@@ -28,9 +28,9 @@ For a more comprehensive confluence system that integrates all four free indicat
 | Indicator | Purpose | Status |
 |-----------|---------|--------|
 | [SMC Toolkit](indicators/01-smc-toolkit/) | Order Blocks, FVG, Liquidity Sweeps, BoS/CHoCH | ✅ Live |
-| [Volume Profile Plus](indicators/02-volume-profile-plus/) | Session-based VP, POC, VAH/VAL, Volume Nodes | 🚧 Coming Soon |
-| [MTF Divergence Scanner](indicators/03-mtf-divergence/) | Multi-timeframe RSI/MACD divergence detection | 🚧 Coming Soon |
-| [ATR Helper](indicators/04-atr-helper/) | Dynamic SL/TP, R:R visualization, position sizing | 🚧 Coming Soon |
+| [Volume Profile Plus](indicators/02-volume-profile-plus/) | Session-based VP, POC, VAH/VAL, Volume Nodes | ✅ Live |
+| [MTF Divergence Scanner](indicators/03-mtf-divergence/) | Multi-timeframe RSI/MACD divergence detection | ✅ Live |
+| [ATR Helper](indicators/04-atr-helper/) | Dynamic SL/TP, R:R visualization, position sizing | ✅ Live |
 
 ### 💎 Pro (Invite-Only)
 
@@ -87,12 +87,12 @@ Already implemented and shipped:
 
 - [x] Repository structure and documentation framework
 - [x] SMC Toolkit — Order Blocks, FVG, Liquidity Sweeps, BoS/CHoCH ([details](indicators/01-smc-toolkit/))
+- [x] Volume Profile Plus (Session-based with POC/VAH/VAL)
+- [x] MTF Divergence Scanner (RSI/MACD across timeframes)
+- [x] ATR Helper (Dynamic SL/TP and R:R visualization)
 
 Planned future additions:
 
-- [ ] Volume Profile Plus (Session-based with POC/VAH/VAL)
-- [ ] MTF Divergence Scanner (RSI/MACD across timeframes)
-- [ ] ATR Helper (Dynamic SL/TP and R:R visualization)
 - [ ] Pro Confluence Engine (combines all four; invite-only)
 - [ ] Comprehensive backtest results and statistical evidence
 - [ ] Trading strategy companion guides (per indicator)

@@ -28,9 +28,9 @@ Dört ücretsiz göstergeyi entegre eden daha kapsamlı bir konfluans sistemi i�
 | Gösterge | Amaç | Durum |
 |----------|------|-------|
 | [SMC Toolkit](indicators/01-smc-toolkit/) | Order Blocks, Fair Value Gaps (FVG), Likidite Sweep'leri, BoS/CHoCH | ✅ Canlı |
-| [Volume Profile Plus](indicators/02-volume-profile-plus/) | Seans bazlı VP, POC, VAH/VAL, Hacim Düğümleri | 🚧 Yakında |
-| [MTF Divergence Scanner](indicators/03-mtf-divergence/) | Çoklu zaman dilimi RSI/MACD ıraksaklık tespiti | 🚧 Yakında |
-| [ATR Helper](indicators/04-atr-helper/) | Dinamik SL/TP, R:R görselleştirmesi, pozisyon büyüklüğü | 🚧 Yakında |
+| [Volume Profile Plus](indicators/02-volume-profile-plus/) | Seans bazlı VP, POC, VAH/VAL, Hacim Düğümleri | ✅ Canlı |
+| [MTF Divergence Scanner](indicators/03-mtf-divergence/) | Çoklu zaman dilimi RSI/MACD ıraksaklık tespiti | ✅ Canlı |
+| [ATR Helper](indicators/04-atr-helper/) | Dinamik SL/TP, R:R görselleştirmesi, pozisyon büyüklüğü | ✅ Canlı |
 
 ### 💎 Pro (Davetiyeli Erişim)
 
@@ -87,12 +87,12 @@ Zaten implement edilmiş ve gönderilmiş:
 
 - [x] Repo yapısı ve dokümantasyon iskeleti
 - [x] SMC Toolkit — Order Blocks, FVG, Likidite Sweep'leri, BoS/CHoCH ([detaylar](indicators/01-smc-toolkit/))
+- [x] Volume Profile Plus (POC/VAH/VAL ile seans bazlı)
+- [x] MTF Divergence Scanner (Zaman dilimleri arasında RSI/MACD)
+- [x] ATR Helper (Dinamik SL/TP ve R:R görselleştirmesi)
 
 Planlanmış gelecek eklemeler:
 
-- [ ] Volume Profile Plus (POC/VAH/VAL ile seans bazlı)
-- [ ] MTF Divergence Scanner (Zaman dilimleri arasında RSI/MACD)
-- [ ] ATR Helper (Dinamik SL/TP ve R:R görselleştirmesi)
 - [ ] Pro Confluence Engine (dördünü birleştirir; davetiyeli erişim)
 - [ ] Kapsamlı geri test (backtest) sonuçları ve istatistiksel kanıt
 - [ ] Ticaret stratejisi eşlik kılavuzları (gösterge başına)

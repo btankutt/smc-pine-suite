@@ -1,0 +1,203 @@
+// =============================================================================
+// MTF Divergence Scanner
+// =============================================================================
+// Author:      Baris Tankut (@btankutt)
+// Repository:  https://github.com/btankutt/smc-pine-suite
+// License:     MPL 2.0 (see LICENSE-FREE)
+// Created:     2026-06-17
+// Version:     1.0.0
+// -----------------------------------------------------------------------------
+// Multi-timeframe RSI / MACD divergence detector for TradingView:
+//   - Regular divergence (reversal) and hidden divergence (continuation)
+//   - Up to three timeframes scanned simultaneously via request.security
+//   - On-chart labels plus a per-timeframe status table
+//
+// Divergences are detected from confirmed oscillator pivots, so signals only
+// print once the pivot is locked in (piv_right bars after it forms). This
+// confirmation removes most of the repaint risk inherent to MTF scanning.
+//
+// Disclaimer: Educational tool, not financial advice. Past performance does
+// not guarantee future results. Always backtest and use proper risk management.
+// =============================================================================
+
+//@version=6
+indicator("MTF Divergence Scanner [btankutt]", overlay=true, max_labels_count=500)
+
+// =============================================================================
+// CONSTANTS
+// =============================================================================
+int TABLE_ROWS = 4   // header + up to 3 timeframes
+
+// Input group names
+GRP_OSC = "Oscillator"
+GRP_PIV = "Pivots"
+GRP_DIV = "Divergence Types"
+GRP_TF  = "Timeframes"
+GRP_DSP = "Display"
+
+// =============================================================================
+// USER INPUTS
+// =============================================================================
+// Group 1 - Oscillator
+string osc_type   = input.string("RSI", "Oscillator", options=["RSI", "MACD"], group=GRP_OSC)
+int    rsi_len    = input.int(14, "RSI length", minval=2, maxval=100, group=GRP_OSC)
+int    macd_fast  = input.int(12, "MACD fast length", minval=1, group=GRP_OSC)
+int    macd_slow  = input.int(26, "MACD slow length", minval=2, group=GRP_OSC)
+int    macd_sig   = input.int(9,  "MACD signal length", minval=1, group=GRP_OSC)
+
+// Group 2 - Pivots
+int piv_left  = input.int(5, "Pivot left",  minval=1, maxval=50, group=GRP_PIV)
+int piv_right = input.int(5, "Pivot right", minval=1, maxval=50, group=GRP_PIV)
+
+// Group 3 - Divergence types
+bool show_regular = input.bool(true,  "Regular divergence (reversal)",     group=GRP_DIV)
+bool show_hidden  = input.bool(false, "Hidden divergence (continuation)",  group=GRP_DIV)
+
+// Group 4 - Timeframes (blank = current chart timeframe)
+bool   tf1_on = input.bool(true,  "Timeframe 1", inline="tf1", group=GRP_TF)
+string tf1    = input.timeframe("",   "", inline="tf1", group=GRP_TF)
+bool   tf2_on = input.bool(true,  "Timeframe 2", inline="tf2", group=GRP_TF)
+string tf2    = input.timeframe("60", "", inline="tf2", group=GRP_TF)
+bool   tf3_on = input.bool(true,  "Timeframe 3", inline="tf3", group=GRP_TF)
+string tf3    = input.timeframe("240", "", inline="tf3", group=GRP_TF)
+
+// Group 5 - Display
+bool  show_labels = input.bool(true, "Show on-chart labels", group=GRP_DSP)
+bool  show_table  = input.bool(true, "Show status table", group=GRP_DSP)
+color bull_color  = input.color(color.new(color.green, 0), "Bullish color", group=GRP_DSP)
+color bear_color  = input.color(color.new(color.red, 0),   "Bearish color", group=GRP_DSP)
+
+// =============================================================================
+// DIVERGENCE ENGINE
+// =============================================================================
+// Returns four flags for the timeframe in which it is evaluated:
+//   [regular_bull, regular_bear, hidden_bull, hidden_bear]
+// Regular bullish:  price lower low,  oscillator higher low   (reversal up)
+// Regular bearish:  price higher high, oscillator lower high  (reversal down)
+// Hidden  bullish:  price higher low, oscillator lower low     (uptrend pullback)
+// Hidden  bearish:  price lower high, oscillator higher high   (downtrend pullback)
+calc_div() =>
+    float osc = na
+    if osc_type == "RSI"
+        osc := ta.rsi(close, rsi_len)
+    else
+        [_m, _s, hist] = ta.macd(close, macd_fast, macd_slow, macd_sig)
+        osc := hist
+
+    float pl = ta.pivotlow(osc,  piv_left, piv_right)
+    float ph = ta.pivothigh(osc, piv_left, piv_right)
+
+    var float prev_pl_osc = na
+    var float prev_pl_prc = na
+    var float prev_ph_osc = na
+    var float prev_ph_prc = na
+
+    bool reg_bull = false
+    bool reg_bear = false
+    bool hid_bull = false
+    bool hid_bear = false
+
+    if not na(pl)
+        float prc = low[piv_right]
+        if not na(prev_pl_osc)
+            if prc < prev_pl_prc and pl > prev_pl_osc
+                reg_bull := true
+            if prc > prev_pl_prc and pl < prev_pl_osc
+                hid_bull := true
+        prev_pl_osc := pl
+        prev_pl_prc := prc
+
+    if not na(ph)
+        float prc = high[piv_right]
+        if not na(prev_ph_osc)
+            if prc > prev_ph_prc and ph < prev_ph_osc
+                reg_bear := true
+            if prc < prev_ph_prc and ph > prev_ph_osc
+                hid_bear := true
+        prev_ph_osc := ph
+        prev_ph_prc := prc
+
+    [reg_bull, reg_bear, hid_bull, hid_bear]
+
+// =============================================================================
+// PER-TIMEFRAME PROCESSING
+// =============================================================================
+// Resolve a blank timeframe to the chart's own timeframe, then evaluate the
+// engine in that timeframe's context with lookahead disabled.
+resolve_tf(string tf) =>
+    tf == "" ? timeframe.period : tf
+
+// Last-seen signal text per timeframe, for the status table.
+var string tf1_state = "—"
+var string tf2_state = "—"
+var string tf3_state = "—"
+
+// Draw labels for one timeframe's flags and return whether anything fired.
+process_tf(string tfname, bool enabled, bool rb, bool rn, bool hb, bool hn) =>
+    bool bull_fired = (show_regular and rb) or (show_hidden and hb)
+    bool bear_fired = (show_regular and rn) or (show_hidden and hn)
+    if enabled and show_labels
+        if bull_fired
+            string txt = (show_regular and rb ? "Reg" : "Hid") + " Bull " + tfname
+            label.new(bar_index, low, txt, yloc=yloc.belowbar,
+                      style=label.style_label_up, color=bull_color,
+                      textcolor=color.white, size=size.small)
+        if bear_fired
+            string txt = (show_regular and rn ? "Reg" : "Hid") + " Bear " + tfname
+            label.new(bar_index, high, txt, yloc=yloc.abovebar,
+                      style=label.style_label_down, color=bear_color,
+                      textcolor=color.white, size=size.small)
+    [bull_fired, bear_fired]
+
+// --- Evaluate each timeframe ------------------------------------------------
+[r1b, r1n, h1b, h1n] = request.security(syminfo.tickerid, resolve_tf(tf1), calc_div(), lookahead=barmerge.lookahead_off)
+[r2b, r2n, h2b, h2n] = request.security(syminfo.tickerid, resolve_tf(tf2), calc_div(), lookahead=barmerge.lookahead_off)
+[r3b, r3n, h3b, h3n] = request.security(syminfo.tickerid, resolve_tf(tf3), calc_div(), lookahead=barmerge.lookahead_off)
+
+[bull1, bear1] = process_tf(tf1 == "" ? "Chart" : tf1, tf1_on, r1b, r1n, h1b, h1n)
+[bull2, bear2] = process_tf(tf2 == "" ? "Chart" : tf2, tf2_on, r2b, r2n, h2b, h2n)
+[bull3, bear3] = process_tf(tf3 == "" ? "Chart" : tf3, tf3_on, r3b, r3n, h3b, h3n)
+
+if tf1_on and bull1
+    tf1_state := "Bull"
+if tf1_on and bear1
+    tf1_state := "Bear"
+if tf2_on and bull2
+    tf2_state := "Bull"
+if tf2_on and bear2
+    tf2_state := "Bear"
+if tf3_on and bull3
+    tf3_state := "Bull"
+if tf3_on and bear3
+    tf3_state := "Bear"
+
+// =============================================================================
+// STATUS TABLE
+// =============================================================================
+var table panel = table.new(position.top_right, 2, TABLE_ROWS, border_width=1)
+
+state_color(string s) =>
+    s == "Bull" ? bull_color : s == "Bear" ? bear_color : color.new(color.gray, 40)
+
+if show_table and barstate.islast
+    table.cell(panel, 0, 0, "Timeframe", text_color=color.white, bgcolor=color.new(color.gray, 0), text_size=size.small)
+    table.cell(panel, 1, 0, "Last Div",  text_color=color.white, bgcolor=color.new(color.gray, 0), text_size=size.small)
+
+    table.cell(panel, 0, 1, tf1_on ? (tf1 == "" ? "Chart" : tf1) : "off", text_color=color.white, bgcolor=color.new(color.black, 30), text_size=size.small)
+    table.cell(panel, 1, 1, tf1_on ? tf1_state : "—", text_color=color.white, bgcolor=state_color(tf1_on ? tf1_state : "—"), text_size=size.small)
+
+    table.cell(panel, 0, 2, tf2_on ? (tf2 == "" ? "Chart" : tf2) : "off", text_color=color.white, bgcolor=color.new(color.black, 30), text_size=size.small)
+    table.cell(panel, 1, 2, tf2_on ? tf2_state : "—", text_color=color.white, bgcolor=state_color(tf2_on ? tf2_state : "—"), text_size=size.small)
+
+    table.cell(panel, 0, 3, tf3_on ? (tf3 == "" ? "Chart" : tf3) : "off", text_color=color.white, bgcolor=color.new(color.black, 30), text_size=size.small)
+    table.cell(panel, 1, 3, tf3_on ? tf3_state : "—", text_color=color.white, bgcolor=state_color(tf3_on ? tf3_state : "—"), text_size=size.small)
+
+// =============================================================================
+// ALERTS
+// =============================================================================
+bool any_bull = (tf1_on and bull1) or (tf2_on and bull2) or (tf3_on and bull3)
+bool any_bear = (tf1_on and bear1) or (tf2_on and bear2) or (tf3_on and bear3)
+
+alertcondition(any_bull, "Bullish divergence", "Bullish divergence detected on at least one timeframe")
+alertcondition(any_bear, "Bearish divergence", "Bearish divergence detected on at least one timeframe")
+alertcondition(any_bull or any_bear, "Any divergence", "A divergence was detected on at least one timeframe")
