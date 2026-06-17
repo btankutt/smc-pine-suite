@@ -128,8 +128,8 @@ if barstate.islast
 
         // Pass 2 — distribute each bar's volume across the rows its range spans.
         for i = 0 to span_bars
-            int lo_row = math.floor((low[i]  - lo) / row_h)
-            int hi_row = math.floor((high[i] - lo) / row_h)
+            int lo_row = int(math.floor((low[i]  - lo) / row_h))
+            int hi_row = int(math.floor((high[i] - lo) / row_h))
             lo_row := math.max(0, math.min(num_rows - 1, lo_row))
             hi_row := math.max(0, math.min(num_rows - 1, hi_row))
             int   touched = hi_row - lo_row + 1
