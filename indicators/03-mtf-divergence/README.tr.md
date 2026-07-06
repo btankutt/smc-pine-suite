@@ -10,7 +10,7 @@
 
 Fiyat salınımlarını bir osilatöre (RSI veya MACD histogramı) karşı karşılaştırıp hem **regular** (dönüş) hem **hidden** (devam) uyumsuzluklarını işaretleyen bağımsız bir uyumsuzluk tarayıcısı. `request.security` ile aynı anda üç zaman dilimini değerlendirir; böylece grafik zaman dilimini izlerken daha yüksek zaman dilimleri arka planda taranır.
 
-Sinyaller **onaylanmış osilatör pivot'larından** türetilir — bir uyumsuzluk yalnızca pivot'u kilitlendiğinde (oluşumundan `piv_right` bar sonra) çizilir. Bu onay adımı, naif MTF uyumsuzluk scriptlerinin yaşadığı repaint riskinin çoğunu ortadan kaldırır.
+Sinyaller **onaylanmış osilatör pivot'larından** türetilir — bir uyumsuzluk yalnızca pivot'u kilitlendiğinde (oluşumundan `piv_right` bar sonra) çizilir. Üst zaman dilimi bayrakları ayrıca yalnızca son **kapanmış** HTF barından okunur ve tüm çıktı onaylı barlarla kapılanır — basılan bir sinyal bar içinde titremez ve grafik yenilemesinden sağ çıkar.
 
 Bu gösterge [SMC Pine Suite](../../README.tr.md)'in parçasıdır. Pine Script v6 ile inşa edildi: tuple döndüren fonksiyonlar, MTF değerlendirmesi için `request.security` ve durum paneli için bir `table`.
 
@@ -105,9 +105,10 @@ Tespit edilen uyumsuzluklar barda etiket basar (bullish için altta, bearish iç
 
 ## Repaint Notları
 
-- Sinyaller **onaylı pivot'lara** dayanır, basılan bir etiket kaybolmaz.
-- Üst zaman dilimi değerleri HTF bar geliştikçe güncellenir; uyumsuzluğun kendisi yine de `piv_right` kapanmış HTF barı gerektirdiğinden bayrak bar-içi titremez.
-- `lookahead` devre dışıdır (`barmerge.lookahead_off`) — gelecek verisi kullanılmaz.
+- Sinyaller **onaylı pivot'lara** dayanır (pivottan `piv_right` kapanmış bar sonra) — uyumsuzluklar yalnızca kilitlenmiş salınımlar üzerinden ölçülür.
+- Üst zaman dilimi bayrakları **onaylı-bar desenini** kullanır (`expr[1]` + `lookahead_on`): her grafik barı, son **kapanmış** HTF barının sinyalini görür — geçmiş ve canlı barlarda birebir aynı; yenilemede hiçbir şey kaymaz ya da kaybolmaz. Gelecek verisi kullanılmaz.
+- Etiketler, tablo durumu ve alarm bayrakları `barstate.isconfirmed` ile kapılanır ve her sinyalin **yükselen kenarına** indirgenir — uyumsuzluk başına bir etiket, bir alarm; bar-içi hayalet sinyal yok.
+- Zaman dilimi slotlarında grafiğin kendi zaman dilimini veya **daha yükseğini** kullanın; grafikten düşük zaman dilimleri `request.security` ile güvenilir taranamaz — bu slotlar nötralize edilir ve durum tablosunda `(low TF)` olarak işaretlenir.
 
 ---
 

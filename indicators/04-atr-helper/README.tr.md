@@ -44,7 +44,7 @@ pozisyon büyüklüğü = risk tutarı ÷ birim başına risk
 
 ### 5. Özet Tablo + Alarmlar
 
-Sağ alttaki tablo ATR, giriş, stop, risk mesafesi, R:R, risk tutarı ve pozisyon büyüklüğünü listeler. Fiyat planlanan stop'u veya ilk hedefi kestiğinde alarmlar tetiklenir.
+Sağ alttaki tablo ATR, giriş, stop, risk mesafesi, her hedef için R:R, risk tutarı ve pozisyon büyüklüğünü listeler. Fiyat planlanan stop'u veya ilk hedefi kestiğinde alarmlar tetiklenir. Alarmlar fiyatı **planlanan** seviyelerle karşılaştırır; bu yüzden **Manual** giriş fiyatı kullanın — `Current close` modunda seviyeler her kapanışla birlikte kayar ve asla kesilemez.
 
 ---
 
@@ -121,4 +121,4 @@ Bu gösterge **olduğu gibi** sağlanır, kârlılık veya doğruluk garantisi y
 **Barış Tankut** ([@btankutt](https://github.com/btankutt))
 Algoritmik Ticaret Sistemleri & IoT Gömülü Mühendis
 
-[SMC Pine Suite](../../README.tr.md)'
+[SMC Pine Suite](../../README.tr.md)'in parçası — üretim sınıfı Pine Script v6 göstergeleri.

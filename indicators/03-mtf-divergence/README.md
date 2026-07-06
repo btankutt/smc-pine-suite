@@ -8,7 +8,7 @@
 
 A standalone divergence scanner that compares price swings against an oscillator (RSI or MACD histogram) and flags both **regular** (reversal) and **hidden** (continuation) divergences. It evaluates up to three timeframes at once via `request.security`, so you can watch the chart timeframe while higher timeframes are scanned in the background.
 
-Signals are derived from **confirmed oscillator pivots** — a divergence only prints once its pivot is locked (`piv_right` bars after it forms). This confirmation step removes most of the repaint risk that naive MTF divergence scripts suffer from.
+Signals are derived from **confirmed oscillator pivots** — a divergence only prints once its pivot is locked (`piv_right` bars after it forms). Higher-timeframe flags are additionally read from the last **closed** HTF bar only, and all output is gated on confirmed bars — a printed signal does not flicker intrabar and survives a chart refresh.
 
 This indicator is part of [SMC Pine Suite](../../README.md). Built with Pine Script v6: tuple-returning functions, `request.security` for MTF evaluation, and a `table` for the status panel.
 
@@ -103,9 +103,10 @@ Detected divergences print labels at the bar (below for bullish, above for beari
 
 ## Repainting Notes
 
-- Signals are based on **confirmed pivots**, so a printed label will not disappear.
-- Higher-timeframe values update as the HTF bar develops; the divergence itself still requires `piv_right` closed HTF bars to confirm, so the flag does not flicker intrabar.
-- `lookahead` is disabled (`barmerge.lookahead_off`) — no future data is used.
+- Signals are based on **confirmed pivots** (`piv_right` closed bars after the pivot), so divergences are only ever measured on locked-in swings.
+- Higher-timeframe flags use the **confirmed-bar idiom** (`expr[1]` + `lookahead_on`): every chart bar sees the signal of the last **closed** HTF bar — identical on historical and realtime bars, so nothing shifts or disappears on refresh. No future data is used.
+- Labels, table state, and alert flags are gated on `barstate.isconfirmed` and reduced to each signal's **rising edge** — one label and one alert per divergence, no intrabar phantoms.
+- Use the chart's own timeframe or a **higher** one in the timeframe slots; timeframes below the chart's cannot be scanned reliably with `request.security` — such slots are neutralized and marked `(low TF)` in the status table.
 
 ---
 

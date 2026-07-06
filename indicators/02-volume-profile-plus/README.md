@@ -40,7 +40,7 @@ Starting at the POC, the algorithm repeatedly absorbs the heavier of the two adj
 
 ### 5. Alert
 
-A single alert condition fires when price crosses the most recent POC.
+A single alert condition fires when price crosses the current profile's POC. It evaluates **live only** (the profile exists only on the latest bar, so historical bars show no crosses) and is suppressed on the session-rollover bar, where the POC relocates with the new profile.
 
 ---
 
@@ -68,7 +68,7 @@ A single alert condition fires when price crosses the most recent POC.
 - `LVN threshold (% of POC volume)` (default: 20)
 
 ### Display
-- `Profile width (bars)` (default: 80) — Maximum histogram bar length
+- `Profile width (bars)` (default: 60) — Maximum histogram bar length
 - `Show POC line`, `Show Value Area`, `Shade Value Area`, `Show price labels`
 - Colors for profile body, value area, HVN, LVN, and POC
 
@@ -79,7 +79,7 @@ A single alert condition fires when price crosses the most recent POC.
 - **Array-backed bins** — `array<float>` holds per-row volume; the value-area walk and POC search are simple array scans
 - **Volume distribution** — each bar's volume is split evenly across the rows between its low and high, not just assigned to its close
 - **`barstate.islast` recompute** — the profile is rebuilt once per realtime update rather than on every historical bar, keeping the nested loops cheap
-- **Handle arrays + `clear_drawings()`** — boxes, lines, and labels are tracked and deleted before each redraw, so profiles never stack
+- **Handle arrays + inlined clearing** — boxes, lines, and labels are tracked and deleted before each redraw, so profiles never stack (clearing is inlined in the `barstate.islast` block because Pine v6 forbids reassigning a global like `va_box` from inside a function)
 
 ---
 
@@ -98,7 +98,7 @@ A single alert condition fires when price crosses the most recent POC.
 
 - **Compile time:** ~1-2 seconds on most charts
 - **Memory:** Bounded by `max_boxes_count=500`, `max_lines_count=500`, `max_labels_count=500`
-- **Repainting:** The live session's profile updates as new volume arrives (expected for any session profile). Closed sessions and fixed-lookback ranges are stable once formed.
+- **Repainting:** The profile is recomputed on the latest bar only — the live window updates as new volume arrives (expected for any session profile), and only the current session / lookback window is drawn; closed sessions are not kept on the chart. In fixed-lookback mode the window rolls, so POC/VAH/VAL drift as new bars arrive.
 
 ---
 

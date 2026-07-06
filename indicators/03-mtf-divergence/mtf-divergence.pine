@@ -5,16 +5,36 @@
 // Repository:  https://github.com/btankutt/smc-pine-suite
 // License:     MPL 2.0 (see LICENSE-FREE)
 // Created:     2026-06-17
-// Version:     1.0.0
+// Version:     1.1.0
+//   - FIX: HTF flags are now requested with the confirmed-bar idiom
+//     (expr[1] + lookahead_on): every chart bar sees the signal of the last
+//     CLOSED HTF bar, identically on historical and realtime bars. The
+//     previous call (live flags + lookahead_off) let the developing HTF bar
+//     print signals that could vanish on refresh. Chart-TF slots instead use
+//     the engine evaluated directly in chart scope - a "same TF?" test must
+//     not live inside a request.security expression, because Pine duplicates
+//     the expression's dependency chain into the REQUESTED context.
+//   - FIX: signals are reduced to their rising edge - one HTF divergence
+//     previously drew a label (and could fire an alert) on EVERY chart bar
+//     mapped to that HTF period (e.g. 240 duplicates on a 1m chart).
+//   - FIX: labels, table state and alert flags gated on barstate.isconfirmed
+//     (house rule) - no intrabar phantom output.
+//   - FIX: slots set BELOW the chart timeframe are neutralized and marked
+//     "(low TF)" in the table - request.security samples one lower-TF bar
+//     per chart bar and would silently drop signals.
+//   - ta.rsi / ta.macd now run unconditionally; the oscillator input only
+//     selects which series is read (consistent-calculation rule).
 // -----------------------------------------------------------------------------
 // Multi-timeframe RSI / MACD divergence detector for TradingView:
 //   - Regular divergence (reversal) and hidden divergence (continuation)
 //   - Up to three timeframes scanned simultaneously via request.security
 //   - On-chart labels plus a per-timeframe status table
 //
-// Divergences are detected from confirmed oscillator pivots, so signals only
-// print once the pivot is locked in (piv_right bars after it forms). This
-// confirmation removes most of the repaint risk inherent to MTF scanning.
+// Divergences are detected from confirmed oscillator pivots (locked in
+// piv_right bars after they form), higher-timeframe flags are read from the
+// last CLOSED HTF bar only, and all output is gated on barstate.isconfirmed -
+// each signal prints exactly once, does not flicker intrabar, and survives a
+// chart refresh.
 //
 // Disclaimer: Educational tool, not financial advice. Past performance does
 // not guarantee future results. Always backtest and use proper risk management.
@@ -77,12 +97,11 @@ color bear_color  = input.color(color.new(color.red, 0),   "Bearish color", grou
 // Hidden  bullish:  price higher low, oscillator lower low     (uptrend pullback)
 // Hidden  bearish:  price lower high, oscillator higher high   (downtrend pullback)
 calc_div() =>
-    float osc = na
-    if osc_type == "RSI"
-        osc := ta.rsi(close, rsi_len)
-    else
-        [_m, _s, hist] = ta.macd(close, macd_fast, macd_slow, macd_sig)
-        osc := hist
+    // ta.* calls stay unconditional (consistent-calculation rule): both
+    // oscillators are computed every bar; the input only selects one.
+    float rsi_val = ta.rsi(close, rsi_len)
+    [_m, _s, macd_hist] = ta.macd(close, macd_fast, macd_slow, macd_sig)
+    float osc = osc_type == "RSI" ? rsi_val : macd_hist
 
     float pl = ta.pivotlow(osc,  piv_left, piv_right)
     float ph = ta.pivothigh(osc, piv_left, piv_right)
@@ -122,10 +141,24 @@ calc_div() =>
 // =============================================================================
 // PER-TIMEFRAME PROCESSING
 // =============================================================================
-// Resolve a blank timeframe to the chart's own timeframe, then evaluate the
-// engine in that timeframe's context with lookahead disabled.
+// Resolve a blank timeframe to the chart's own timeframe.
 resolve_tf(string tf) =>
     tf == "" ? timeframe.period : tf
+
+// Confirmed-flag wrapper for the HTF requests: the flags are read one bar
+// back ([1]) and requested with lookahead_on - the canonical confirmed-bar
+// idiom. Every chart bar inside HTF bar N sees the flags of the CLOSED bar
+// N-1, identically on historical and realtime bars: no lookahead leak, no
+// intrabar flicker, no shift on refresh.
+// IMPORTANT: nothing chart-dependent may appear inside a request.security
+// expression. Pine duplicates the expression's whole dependency chain into
+// the REQUESTED context (where timeframe.period resolves to the requested
+// TF), so a "same TF?" flag computed at chart scope would silently
+// re-evaluate to true inside the request and cancel the offset. The
+// chart-vs-HTF choice is therefore made AFTER the requests, below.
+calc_div_conf() =>
+    [rb, rn, hb, hn] = calc_div()
+    [rb[1], rn[1], hb[1], hn[1]]
 
 // Last-seen signal text per timeframe, for the status table.
 var string tf1_state = "—"
@@ -133,26 +166,70 @@ var string tf2_state = "—"
 var string tf3_state = "—"
 
 // Draw labels for one timeframe's flags and return whether anything fired.
+// An HTF flag stays true for every chart bar inside the signalling HTF
+// period, so each flag is reduced to its rising edge first - one divergence,
+// one label, one alert. (Consecutive same-type pivots cannot occupy adjacent
+// HTF bars - pivotlow/high need piv_left strictly-worse neighbours - so the
+// edge cannot swallow a second signal.) All output is additionally gated on
+// barstate.isconfirmed: no intrabar phantoms, realtime matches history.
 process_tf(string tfname, bool enabled, bool rb, bool rn, bool hb, bool hn) =>
-    bool bull_fired = (show_regular and rb) or (show_hidden and hb)
-    bool bear_fired = (show_regular and rn) or (show_hidden and hn)
-    if enabled and show_labels
+    bool rb_new = rb and not rb[1]
+    bool rn_new = rn and not rn[1]
+    bool hb_new = hb and not hb[1]
+    bool hn_new = hn and not hn[1]
+    bool bull_fired = (show_regular and rb_new) or (show_hidden and hb_new)
+    bool bear_fired = (show_regular and rn_new) or (show_hidden and hn_new)
+    if enabled and show_labels and barstate.isconfirmed
         if bull_fired
-            string txt = (show_regular and rb ? "Reg" : "Hid") + " Bull " + tfname
+            string txt = (show_regular and rb_new ? "Reg" : "Hid") + " Bull " + tfname
             label.new(bar_index, low, txt, yloc=yloc.belowbar,
                       style=label.style_label_up, color=bull_color,
                       textcolor=color.white, size=size.small)
         if bear_fired
-            string txt = (show_regular and rn ? "Reg" : "Hid") + " Bear " + tfname
+            string txt = (show_regular and rn_new ? "Reg" : "Hid") + " Bear " + tfname
             label.new(bar_index, high, txt, yloc=yloc.abovebar,
                       style=label.style_label_down, color=bear_color,
                       textcolor=color.white, size=size.small)
-    [bull_fired, bear_fired]
+    [bull_fired and barstate.isconfirmed, bear_fired and barstate.isconfirmed]
 
 // --- Evaluate each timeframe ------------------------------------------------
-[r1b, r1n, h1b, h1n] = request.security(syminfo.tickerid, resolve_tf(tf1), calc_div(), lookahead=barmerge.lookahead_off)
-[r2b, r2n, h2b, h2n] = request.security(syminfo.tickerid, resolve_tf(tf2), calc_div(), lookahead=barmerge.lookahead_off)
-[r3b, r3n, h3b, h3n] = request.security(syminfo.tickerid, resolve_tf(tf3), calc_div(), lookahead=barmerge.lookahead_off)
+// The engine evaluated directly in chart scope - used for slots set to the
+// chart's own timeframe, where the [1] offset would only add a bar of lag.
+// This call site keeps its own var state, independent of the requests.
+[cd_rb, cd_rn, cd_hb, cd_hn] = calc_div()
+
+// Same-TF detection stays in chart scope and is applied AFTER the requests -
+// see the calc_div_conf note for why it must not enter the expression.
+bool tf1_chart = resolve_tf(tf1) == timeframe.period
+bool tf2_chart = resolve_tf(tf2) == timeframe.period
+bool tf3_chart = resolve_tf(tf3) == timeframe.period
+
+// A slot BELOW the chart TF cannot be scanned reliably: request.security
+// samples one lower-TF bar per chart bar, silently dropping one-bar signal
+// pulses, and historical vs realtime sampling differ. Such slots are
+// neutralized (no flags) and marked "(low TF)" in the status table.
+bool tf1_low = timeframe.in_seconds(resolve_tf(tf1)) < timeframe.in_seconds(timeframe.period)
+bool tf2_low = timeframe.in_seconds(resolve_tf(tf2)) < timeframe.in_seconds(timeframe.period)
+bool tf3_low = timeframe.in_seconds(resolve_tf(tf3)) < timeframe.in_seconds(timeframe.period)
+
+[q1b, q1n, q1hb, q1hn] = request.security(syminfo.tickerid, resolve_tf(tf1), calc_div_conf(), lookahead=barmerge.lookahead_on)
+[q2b, q2n, q2hb, q2hn] = request.security(syminfo.tickerid, resolve_tf(tf2), calc_div_conf(), lookahead=barmerge.lookahead_on)
+[q3b, q3n, q3hb, q3hn] = request.security(syminfo.tickerid, resolve_tf(tf3), calc_div_conf(), lookahead=barmerge.lookahead_on)
+
+// Chart-TF slots take the direct chart-context flags; lower-TF slots are
+// neutralized; HTF slots take the confirmed request flags.
+bool r1b = tf1_chart ? cd_rb : tf1_low ? false : q1b
+bool r1n = tf1_chart ? cd_rn : tf1_low ? false : q1n
+bool h1b = tf1_chart ? cd_hb : tf1_low ? false : q1hb
+bool h1n = tf1_chart ? cd_hn : tf1_low ? false : q1hn
+bool r2b = tf2_chart ? cd_rb : tf2_low ? false : q2b
+bool r2n = tf2_chart ? cd_rn : tf2_low ? false : q2n
+bool h2b = tf2_chart ? cd_hb : tf2_low ? false : q2hb
+bool h2n = tf2_chart ? cd_hn : tf2_low ? false : q2hn
+bool r3b = tf3_chart ? cd_rb : tf3_low ? false : q3b
+bool r3n = tf3_chart ? cd_rn : tf3_low ? false : q3n
+bool h3b = tf3_chart ? cd_hb : tf3_low ? false : q3hb
+bool h3n = tf3_chart ? cd_hn : tf3_low ? false : q3hn
 
 [bull1, bear1] = process_tf(tf1 == "" ? "Chart" : tf1, tf1_on, r1b, r1n, h1b, h1n)
 [bull2, bear2] = process_tf(tf2 == "" ? "Chart" : tf2, tf2_on, r2b, r2n, h2b, h2n)
@@ -183,13 +260,13 @@ if show_table and barstate.islast
     table.cell(panel, 0, 0, "Timeframe", text_color=color.white, bgcolor=color.new(color.gray, 0), text_size=size.small)
     table.cell(panel, 1, 0, "Last Div",  text_color=color.white, bgcolor=color.new(color.gray, 0), text_size=size.small)
 
-    table.cell(panel, 0, 1, tf1_on ? (tf1 == "" ? "Chart" : tf1) : "off", text_color=color.white, bgcolor=color.new(color.black, 30), text_size=size.small)
+    table.cell(panel, 0, 1, tf1_on ? (tf1 == "" ? "Chart" : tf1) + (tf1_low ? " (low TF)" : "") : "off", text_color=color.white, bgcolor=color.new(color.black, 30), text_size=size.small)
     table.cell(panel, 1, 1, tf1_on ? tf1_state : "—", text_color=color.white, bgcolor=state_color(tf1_on ? tf1_state : "—"), text_size=size.small)
 
-    table.cell(panel, 0, 2, tf2_on ? (tf2 == "" ? "Chart" : tf2) : "off", text_color=color.white, bgcolor=color.new(color.black, 30), text_size=size.small)
+    table.cell(panel, 0, 2, tf2_on ? (tf2 == "" ? "Chart" : tf2) + (tf2_low ? " (low TF)" : "") : "off", text_color=color.white, bgcolor=color.new(color.black, 30), text_size=size.small)
     table.cell(panel, 1, 2, tf2_on ? tf2_state : "—", text_color=color.white, bgcolor=state_color(tf2_on ? tf2_state : "—"), text_size=size.small)
 
-    table.cell(panel, 0, 3, tf3_on ? (tf3 == "" ? "Chart" : tf3) : "off", text_color=color.white, bgcolor=color.new(color.black, 30), text_size=size.small)
+    table.cell(panel, 0, 3, tf3_on ? (tf3 == "" ? "Chart" : tf3) + (tf3_low ? " (low TF)" : "") : "off", text_color=color.white, bgcolor=color.new(color.black, 30), text_size=size.small)
     table.cell(panel, 1, 3, tf3_on ? tf3_state : "—", text_color=color.white, bgcolor=state_color(tf3_on ? tf3_state : "—"), text_size=size.small)
 
 // =============================================================================

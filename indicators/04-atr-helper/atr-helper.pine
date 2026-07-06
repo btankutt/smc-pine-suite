@@ -5,7 +5,13 @@
 // Repository:  https://github.com/btankutt/smc-pine-suite
 // License:     MPL 2.0 (see LICENSE-FREE)
 // Created:     2026-06-17
-// Version:     1.0.2
+// Version:     1.0.3
+//   - FIX: the file was truncated mid-comment in the ALERTS section - the
+//     stop/TP1 cross alerts promised by the README never existed. Added,
+//     gated on barstate.isconfirmed.
+//   - FIX: the summary table skipped the TP2 row (it jumped TP1 -> TP3).
+//   - FIX: the reward zone assumed TP3 > TP2 > TP1; it now uses the largest
+//     ENABLED R multiple. TP multiples also gained minval=0.1.
 // -----------------------------------------------------------------------------
 // ATR-based trade planning tool for TradingView:
 //   - Dynamic stop-loss from an ATR multiple
@@ -27,7 +33,7 @@ indicator("ATR Helper [btankutt]", overlay=true, max_lines_count=500, max_boxes_
 // =============================================================================
 // CONSTANTS
 // =============================================================================
-int TABLE_ROWS = 9
+int TABLE_ROWS = 10
 
 // Input group names
 GRP_ATR  = "ATR"
@@ -51,11 +57,11 @@ float  manual_entry = input.float(0.0, "Manual entry price", minval=0.0, group=G
 
 // Group 3 - Take profit targets (as multiples of the risk distance)
 bool  tp1_on = input.bool(true,  "TP1", inline="tp1", group=GRP_TP)
-float tp1_r  = input.float(1.0, "", inline="tp1", group=GRP_TP)
+float tp1_r  = input.float(1.0, "", minval=0.1, step=0.1, inline="tp1", group=GRP_TP)
 bool  tp2_on = input.bool(true,  "TP2", inline="tp2", group=GRP_TP)
-float tp2_r  = input.float(2.0, "", inline="tp2", group=GRP_TP)
+float tp2_r  = input.float(2.0, "", minval=0.1, step=0.1, inline="tp2", group=GRP_TP)
 bool  tp3_on = input.bool(true,  "TP3", inline="tp3", group=GRP_TP)
-float tp3_r  = input.float(3.0, "", inline="tp3", group=GRP_TP)
+float tp3_r  = input.float(3.0, "", minval=0.1, step=0.1, inline="tp3", group=GRP_TP)
 
 // Group 4 - Position sizing
 bool   sizing_on   = input.bool(true, "Show position sizing", group=GRP_RISK)
@@ -144,8 +150,17 @@ if barstate.islast and stop_dist > 0
                            bgcolor=color.new(sl_color, zone_transp))
     plan_boxes.push(risk_box)
 
-    // Reward zone (entry -> furthest enabled target), shaded green.
-    float top_tp = tp3_on ? tp3_price : tp2_on ? tp2_price : tp1_on ? tp1_price : entry
+    // Reward zone (entry -> furthest enabled target), shaded green. The
+    // furthest target is the LARGEST enabled R multiple - do not assume the
+    // user kept TP3 > TP2 > TP1.
+    float max_r = 0.0
+    if tp1_on
+        max_r := math.max(max_r, tp1_r)
+    if tp2_on
+        max_r := math.max(max_r, tp2_r)
+    if tp3_on
+        max_r := math.max(max_r, tp3_r)
+    float top_tp = entry + dir * stop_dist * max_r
     box reward_box = box.new(x1, entry, x2, top_tp, extend=extend.right,
                              border_color=color.new(tp_color, 100),
                              bgcolor=color.new(tp_color, zone_transp))
@@ -177,10 +192,21 @@ if show_table and barstate.islast and stop_dist > 0
     put_row(3, "Stop", str.tostring(sl_price, format.mintick))
     put_row(4, "Risk (price)", str.tostring(stop_dist, format.mintick))
     put_row(5, "TP1 R:R", tp1_on ? "1 : " + str.tostring(tp1_r, "#.#") : "—")
-    put_row(6, "TP3 R:R", tp3_on ? "1 : " + str.tostring(tp3_r, "#.#") : "—")
-    put_row(7, "Risk amount", sizing_on ? str.tostring(risk_amount, "#.##") : "—")
-    put_row(8, "Position size", sizing_on and not na(position_size) ? str.tostring(position_size, "#.######") : "—")
+    put_row(6, "TP2 R:R", tp2_on ? "1 : " + str.tostring(tp2_r, "#.#") : "—")
+    put_row(7, "TP3 R:R", tp3_on ? "1 : " + str.tostring(tp3_r, "#.#") : "—")
+    put_row(8, "Risk amount", sizing_on ? str.tostring(risk_amount, "#.##") : "—")
+    put_row(9, "Position size", sizing_on and not na(position_size) ? str.tostring(position_size, "#.######") : "—")
 
 // =============================================================================
 // ALERTS
-// ====================
+// =============================================================================
+// Fire when price crosses the planned stop or the first target. ta.cross
+// stays unconditional (called on every bar); the flags are gated on
+// barstate.isconfirmed so realtime alerts only fire on a bar's final tick.
+// Note: with entry mode "Current close" the levels trail every close, so
+// close - level keeps a constant sign and the crosses can NEVER fire - set a
+// Manual entry price to arm the alerts.
+bool sl_crossed  = ta.cross(close, sl_price)
+bool tp1_crossed = ta.cross(close, tp1_price)
+alertcondition(sl_crossed and barstate.isconfirmed, "Stop crossed", "Price crossed the planned ATR stop")
+alertcondition(tp1_on and tp1_crossed and barstate.isconfirmed, "TP1 crossed", "Price crossed the planned TP1 target")

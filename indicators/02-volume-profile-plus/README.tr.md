@@ -42,7 +42,7 @@ Algoritma POC'tan başlayarak, yapılandırılan hacim yüzdesi yakalanana kadar
 
 ### 5. Alarm
 
-Fiyat en son POC'u kestiğinde tek bir alarm koşulu tetiklenir.
+Fiyat mevcut profilin POC'unu kestiğinde tek bir alarm koşulu tetiklenir. Alarm **yalnızca canlıda** değerlendirilir (profil sadece en son barda var olduğundan geçmiş barlarda kesişme görünmez) ve POC'un yeni profille birlikte yer değiştirdiği seans-devri barında bastırılır.
 
 ---
 
@@ -70,7 +70,7 @@ Fiyat en son POC'u kestiğinde tek bir alarm koşulu tetiklenir.
 - `LVN threshold (% of POC volume)` (varsayılan: 20)
 
 ### Görüntü
-- `Profile width (bars)` (varsayılan: 80) — Maksimum histogram bar uzunluğu
+- `Profile width (bars)` (varsayılan: 60) — Maksimum histogram bar uzunluğu
 - `Show POC line`, `Show Value Area`, `Shade Value Area`, `Show price labels`
 - Profil gövdesi, değer alanı, HVN, LVN ve POC renkleri
 
@@ -81,7 +81,7 @@ Fiyat en son POC'u kestiğinde tek bir alarm koşulu tetiklenir.
 - **Array-tabanlı kovalar** — `array<float>` satır başına hacmi tutar; değer-alanı yürüyüşü ve POC araması basit array taramalarıdır
 - **Hacim dağıtımı** — her barın hacmi, sadece kapanışına atanmak yerine low–high arasındaki satırlara eşit bölünür
 - **`barstate.islast` yeniden hesaplama** — profil her tarihsel barda değil, her gerçek-zaman güncellemesinde bir kez yeniden inşa edilir
-- **Tutamaç array'leri + `clear_drawings()`** — kutular, çizgiler ve etiketler takip edilir ve her yeniden çizimden önce silinir, profiller üst üste yığılmaz
+- **Tutamaç array'leri + satır-içi temizlik** — kutular, çizgiler ve etiketler takip edilir ve her yeniden çizimden önce silinir, profiller üst üste yığılmaz (temizlik `barstate.islast` bloğunun içine yazılmıştır; Pine v6, `va_box` gibi bir global'in fonksiyon içinden yeniden atanmasına izin vermez)
 
 ---
 
@@ -100,7 +100,7 @@ Fiyat en son POC'u kestiğinde tek bir alarm koşulu tetiklenir.
 
 - **Derleme süresi:** çoğu grafikte ~1-2 saniye
 - **Bellek:** `max_boxes_count=500`, `max_lines_count=500`, `max_labels_count=500` ile sınırlı
-- **Repaint:** Canlı seansın profili yeni hacim geldikçe güncellenir (her seans profili için beklenen davranış). Kapanmış seanslar ve sabit-geriye-bakış aralıkları oluştuktan sonra sabittir.
+- **Repaint:** Profil yalnızca en son barda yeniden hesaplanır — canlı pencere yeni hacim geldikçe güncellenir (her seans profili için beklenen davranış) ve grafikte yalnızca mevcut seans / geriye-bakış penceresi çizilir; kapanmış seanslar tutulmaz. Sabit-geriye-bakış modunda pencere kayar, dolayısıyla POC/VAH/VAL yeni barlarla birlikte sürüklenir.
 
 ---
 

@@ -5,7 +5,22 @@
 // Repository:  https://github.com/btankutt/smc-pine-suite
 // License:     MPL 2.0 (see LICENSE-FREE)
 // Created:     2026-06-17
-// Version:     1.0.2
+// Version:     1.0.3
+//   - FIX: the file was truncated mid-statement in the ALERTS section, so the
+//     POC-cross alert promised by the README never compiled. Implemented as
+//     a relocation-proof cross (both closes tested against the CURRENT POC,
+//     so a POC jump across a static price cannot fire it), gated on
+//     barstate.isconfirmed and suppressed on the session-rollover bar. The
+//     alert is live-only by design - the profile exists only on the latest
+//     bar.
+//   - FIX: declared max_bars_back=5000 and clamped the profile span to 4999
+//     bars - the profile indexes high/low/volume with a dynamic offset (up
+//     to the 5000-bar lookback input, or a session far longer than that on a
+//     small chart TF), which otherwise aborts with "offset beyond historical
+//     buffer" runtime errors. Sessions longer than 5000 bars profile the
+//     most recent 5000.
+//   - FIX: Fixed-lookback mode profiled lookback+1 bars (off-by-one), and a
+//     session's first bar pulled in the previous session's last bar.
 // -----------------------------------------------------------------------------
 // Session-based (or fixed-lookback) Volume Profile for TradingView:
 //   - Horizontal volume histogram across price bins
@@ -24,7 +39,7 @@
 // =============================================================================
 
 //@version=6
-indicator("Volume Profile Plus [btankutt]", overlay=true, max_boxes_count=500, max_lines_count=500, max_labels_count=500)
+indicator("Volume Profile Plus [btankutt]", overlay=true, max_boxes_count=500, max_lines_count=500, max_labels_count=500, max_bars_back=5000)
 
 // =============================================================================
 // CONSTANTS
@@ -71,6 +86,8 @@ var array<box>   hist_boxes   = array.new<box>()
 var array<line>  level_lines  = array.new<line>()
 var array<label> level_labels = array.new<label>()
 var box          va_box       = na
+// POC of the most recent recompute, persisted for the alert at the bottom.
+var float        alert_poc    = na
 
 // Session anchoring. session_start_index tracks the bar where the current
 // anchor period began, so the profile spans exactly one session.
@@ -104,9 +121,15 @@ if barstate.islast
         va_box.delete()
         va_box := na
 
-    // How many bars back does the profile reach?
-    int span_bars = calc_mode == "Session" ? (bar_index - session_start_index) : math.min(lookback, bar_index)
-    span_bars := math.max(span_bars, 1)
+    // How many bars back does the profile reach? Session: bars since the
+    // session start (inclusive). Fixed: exactly `lookback` bars - the loops
+    // below run 0..span_bars inclusive, hence the -1. The span is clamped to
+    // 4999: max_bars_back=5000 is Pine's hard buffer cap, and a session can
+    // exceed it (e.g. a weekly anchor on a 1m 24/7 chart is ~10k bars) - the
+    // profile then covers the most recent 5000 bars instead of aborting with
+    // an "offset beyond historical buffer" runtime error.
+    int span_bars = calc_mode == "Session" ? (bar_index - session_start_index) : math.min(lookback - 1, bar_index)
+    span_bars := math.max(math.min(span_bars, 4999), 0)
 
     // Pass 1 — establish the price range over the window.
     float hi = high
@@ -161,6 +184,8 @@ if barstate.islast
         float poc_price = lo + (poc_row + 0.5) * row_h
         float vah_price = lo + (up_row + 1) * row_h
         float val_price = lo + dn_row * row_h
+        // Persist the POC for the alert (independent of line visibility).
+        alert_poc := poc_price
 
         // X anchors — REAL bars only (no future offsets). right_x is the last
         // bar; left_x is the window start. Lines use extend.right to become
@@ -230,10 +255,15 @@ if barstate.islast
 // =============================================================================
 // ALERTS
 // =============================================================================
-// Fire when price crosses the most recent POC. The POC level is tracked in a
-// persistent variable updated during the draw pass (first pushed line = POC).
-var float alert_poc = na
-if barstate.islast and level_lines.size() > 0 and show_poc
-    alert_poc := line.get_y1(level_lines.get(0))
-
-alertcondition(not na(alert_poc
+// Fire when price crosses the current profile's POC. This alert is LIVE-ONLY
+// by design: the profile exists only on the latest bar, so alert_poc is na
+// across history and a refreshed chart shows no past crosses. A genuine
+// cross means the PRICE PATH traversed the current level between the last
+// two closes - ta.cross(close, alert_poc) would also fire when a recompute
+// RELOCATES the POC across a static close (one heavy-volume bar can move the
+// POC to the other side of price), so both closes are tested against the
+// CURRENT level instead. The flag is additionally gated on
+// barstate.isconfirmed (final tick only) and suppressed on an anchor-period
+// rollover, where the profile resets into the new session's range.
+bool poc_crossed = not na(alert_poc) and (close - alert_poc) * (close[1] - alert_poc) < 0
+alertcondition(poc_crossed and not new_period and barstate.isconfirmed, "POC cross", "Price crossed the Volume Profile POC")

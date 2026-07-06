@@ -9,7 +9,7 @@ An ATR-based trade-planning overlay that turns stop placement, targets, and posi
 - 🎯 **R-multiple targets** — up to 3 TPs defined as multiples of the risk distance (R:R is exact by design)
 - 🟥🟩 **Risk / reward zones** — shaded entry→stop and entry→target bands with price labels
 - 🧮 **Position sizing** — from account size, risk %, and stop distance (with a value-per-point input for futures/FX)
-- 🔔 **Alerts** — when price crosses the planned stop or first target
+- 🔔 **Alerts** — when price crosses the planned stop or first target (set a Manual entry price; with "Current close" the levels trail the close and never cross)
 
 **Built for traders who:**
 - Want volatility-adjusted stops instead of fixed-pip stops
@@ -53,7 +53,7 @@ Stop yerleşimi, hedefler ve pozisyon büyüklüğünü tek ve tutarlı bir hesa
 - 🎯 **R-katlı hedefler** — risk mesafesinin katları olarak 3 TP'ye kadar (R:R tasarımca tam)
 - 🟥🟩 **Risk / ödül bölgeleri** — gölgeli giriş→stop ve giriş→hedef bantları, fiyat etiketleriyle
 - 🧮 **Pozisyon büyüklüğü** — hesap büyüklüğü, risk % ve stop mesafesinden (vadeli/FX için birim-başına-değer input'u ile)
-- 🔔 **Alarmlar** — fiyat planlanan stop'u ya da ilk hedefi kesince
+- 🔔 **Alarmlar** — fiyat planlanan stop'u ya da ilk hedefi kesince (Manual giriş fiyatı ayarlayın; "Current close" modunda seviyeler kapanışla birlikte kayar ve asla kesişmez)
 
 **Şu tradeler için tasarlandı:**
 - Sabit-pip stop yerine volatiliteye uyarlı stop isteyenler

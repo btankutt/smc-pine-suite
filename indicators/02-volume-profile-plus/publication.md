@@ -9,7 +9,7 @@ A clean Pine Script v6 Volume Profile with the classic market-profile reference 
 - 🎯 **Point of Control (POC)** — the single highest-volume price level, drawn and labelled
 - 🟦 **Value Area (VAH/VAL)** — the configurable % of volume (default 70%) expanded outward from the POC
 - 🟩 **HVN / 🟥 LVN** — high and low volume nodes highlighted, so you can see where price stalls vs travels fast
-- 🔔 **Alert** — fires when price crosses the most recent POC
+- 🔔 **Alert** — fires when price crosses the current profile's POC (live only; suppressed on session rollover, where the POC relocates)
 
 **Built for traders who:**
 - Trade auction/market-profile concepts and want value-area context on any chart
@@ -52,7 +52,7 @@ Klasik market-profile referans seviyelerini tek bir göstergede toplayan, temiz 
 - 🎯 **Kontrol Noktası (POC)** — en yüksek hacimli tek fiyat seviyesi, çizilir ve etiketlenir
 - 🟦 **Değer Alanı (VAH/VAL)** — POC'tan dışa genişleyen, yapılandırılabilir hacim oranı (varsayılan %70)
 - 🟩 **HVN / 🟥 LVN** — yüksek ve düşük hacim düğümleri vurgulanır; fiyatın nerede duraksayıp nerede hızlı geçtiğini görürsün
-- 🔔 **Alarm** — fiyat en son POC'u kesince tetiklenir
+- 🔔 **Alarm** — fiyat mevcut profilin POC'unu kesince tetiklenir (yalnızca canlı; POC'un yer değiştirdiği seans devrinde bastırılır)
 
 **Şu tradeler için tasarlandı:**
 - Auction/market-profile konseptleriyle işlem yapan ve her grafikte değer-alanı bağlamı isteyenler

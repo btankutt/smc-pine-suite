@@ -42,7 +42,7 @@ The `value per 1.0 price move` input handles instruments where one price unit is
 
 ### 5. Summary Table + Alerts
 
-A bottom-right table lists ATR, entry, stop, risk distance, R:R, risk amount, and position size. Alerts fire when price crosses the planned stop or the first target.
+A bottom-right table lists ATR, entry, stop, risk distance, R:R for each target, risk amount, and position size. Alerts fire when price crosses the planned stop or the first target. The alerts compare price to the **planned** levels, so use a **Manual** entry price — with `Current close` the levels trail every close and can never be crossed.
 
 ---
 
@@ -119,4 +119,4 @@ This indicator is provided **as is**, without any guarantee of profitability or 
 **Barış Tankut** ([@btankutt](https://github.com/btankutt))
 Algorithmic Trading Systems & IoT Embedded Engineer
 
-Part of [SMC Pine Suite](../.
+Part of [SMC Pine Suite](../../README.md) — production-grade Pine Script v6 indicators.

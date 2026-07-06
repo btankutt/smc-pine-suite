@@ -31,8 +31,8 @@ Detect regular and hidden divergences on RSI or MACD across up to three timefram
 5. Combine with the SMC Toolkit — divergence into an OB or after a sweep is a strong entry
 
 **Notes:**
-- Signals are based on confirmed pivots, so printed labels don't disappear
-- `lookahead` is disabled — no future data is used
+- Signals print once per divergence, on confirmed pivots and closed HTF bars only — labels don't flicker or disappear on refresh
+- HTF data uses the confirmed-bar idiom (last closed HTF bar) — no future data is used
 - Part of [SMC Pine Suite](https://github.com/btankutt/smc-pine-suite) on GitHub — full source and more indicators there
 - Open source under MPL 2.0
 
@@ -72,8 +72,8 @@ RSI veya MACD üzerinde regular ve hidden uyumsuzlukları, aynı anda üç zaman
 5. SMC Toolkit ile birleştir — bir OB içine ya da sweep sonrası uyumsuzluk güçlü bir giriştir
 
 **Notlar:**
-- Sinyaller onaylı pivot'lara dayanır, basılan etiketler kaybolmaz
-- `lookahead` devre dışıdır — gelecek verisi kullanılmaz
+- Sinyaller uyumsuzluk başına bir kez, yalnızca onaylı pivot'larda ve kapanmış HTF barlarında basılır — etiketler titremez, yenilemede kaybolmaz
+- HTF verisi onaylı-bar desenini kullanır (son kapanmış HTF barı) — gelecek verisi kullanılmaz
 - GitHub'daki [SMC Pine Suite](https://github.com/btankutt/smc-pine-suite) paketinin parçasıdır — tam kaynak ve daha fazla gösterge orada
 - MPL 2.0 ile açık kaynak
 
