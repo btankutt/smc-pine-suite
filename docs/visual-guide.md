@@ -1,40 +1,109 @@
 # Visual Guide
 
-What every on-chart element in the suite means, at a glance.
+> How to read what each indicator draws on the chart. A reference for the colors, lines, boxes, and labels you'll see.
+
+🇹🇷 Türkçe sürüm bu dosyanın [ikinci yarısındadır](#görsel-kılavuz-türkçe).
+
+> 📷 Annotated screenshots are added per indicator over time. Until an indicator's images land, use the descriptions below — they map one-to-one to what the code draws.
+
+---
 
 ## SMC Toolkit
 
 | Element | Appearance | Meaning |
 |---------|-----------|---------|
-| **BoS label** | Green (above bar) / red (below bar), tiny | Close broke the last swing in the trend direction — continuation |
-| **CHoCH label** | Same styling as BoS, text "CHoCH" | Close broke the last swing *against* the trend — potential reversal |
-| **Bullish OB** | Green box, extends right | Last down-candle before an upside break; potential demand on retest |
-| **Bearish OB** | Red box, extends right | Last up-candle before a downside break; potential supply on retest |
-| **Bullish FVG** | Aqua box | 3-candle gap below price (low > high two bars back) |
-| **Bearish FVG** | Orange box | 3-candle gap above price |
-| **Gray frozen box** | Gray fill, no longer extending | Mitigated OB / filled FVG — the zone has been consumed |
-| **Aqua dashed line** | Extends right | BSL — equal highs (buy-side liquidity pool) |
-| **Orange dashed line** | Extends right | SSL — equal lows (sell-side liquidity pool) |
-| **Gray frozen line** | Dashed, stops at its last bar | Swept or broken liquidity level — no longer live |
-| **"BSL/SSL Swept" label** | Red above / green below | Wick beyond the level with a close back inside — stop-hunt event |
+| **BoS label** | Small green/red label at a break | Break of Structure — trend continuation |
+| **CHoCH label** | Small green/red label at a break | Change of Character — possible reversal |
+| **Order Block** | Green (bullish) / red (bearish) box | Last opposite candle before a break; an entry zone |
+| **Mitigated OB** | Box recolored gray | Price has tagged the zone; it's "used up" |
+| **Fair Value Gap** | Aqua (bull) / orange (bear) box | 3-candle imbalance |
+| **Filled FVG** | Box recolored gray | Price has returned into the gap |
+| **Liquidity line** | Dashed aqua/orange line | Equal highs (BSL) / equal lows (SSL) |
+| **Sweep label** | "BSL/SSL Swept" | A stop-run that closed back inside |
 
-Reading the chart: **active** zones and levels are colored and project to the right edge; anything gray is history kept only for context.
+## Volume Profile Plus
 
-## Pro Confluence Engine
+| Element | Appearance | Meaning |
+|---------|-----------|---------|
+| **Histogram bars** | Horizontal bars to the right | Volume traded at each price row |
+| **POC line** | Solid orange line + label | Point of Control — highest-volume price |
+| **VAH / VAL lines** | Dashed lines + labels | Top/bottom of the value area |
+| **Value area shading** | Light band between VAH and VAL | The configurable % of volume around the POC |
+| **HVN bars** | Green | High-volume nodes — price tends to stall here |
+| **LVN bars** | Red | Low-volume nodes — price tends to move fast here |
 
-| Element | Meaning |
-|---------|---------|
-| **Green triangle (below bar)** | Confirmed long signal (score, trigger, dominance, cooldown all passed) |
-| **Red triangle (above bar)** | Confirmed short signal |
-| **Gray dotted line** | Latest signal's entry price |
-| **Red / green solid lines** | Latest signal's SL / TP |
-| **Signal label** | Direction, score, SL/TP prices, and R:R for the latest signal |
-| **Gray dotted horizontal** | Rolling POC (highest-volume price bin of the lookback window) |
-| **Purple "Div" label** | Regular RSI divergence at a confirmed pivot |
-| **Dashboard** | Score per side, 5-step bar per component, regime state, HTF bias, last signal, hypothetical stats (W/L/A/E) |
+## MTF Divergence Scanner
 
-Dashboard component bars: `####-` means the component scores 0.8 in that direction. The score cell turns green/red once it clears the adaptive threshold.
+| Element | Appearance | Meaning |
+|---------|-----------|---------|
+| **Bull label** | Green label below the bar | "Reg/Hid Bull" + timeframe; bullish divergence |
+| **Bear label** | Red label above the bar | "Reg/Hid Bear" + timeframe; bearish divergence |
+| **Status table** | Top-right panel | Last divergence direction per timeframe |
+| **"Reg"** | In the label text | Regular divergence (reversal) |
+| **"Hid"** | In the label text | Hidden divergence (continuation) |
 
-## Screenshots
+## ATR Helper
 
-See [indicators/01-smc-toolkit/screenshots/](../indicators/01-smc-toolkit/screenshots/) for annotated examples (BTC 1D structure breaks, BTC 4H order block + liquidity).
+| Element | Appearance | Meaning |
+|---------|-----------|---------|
+| **Entry line** | Blue line + label | Your planned entry price |
+| **Stop line** | Red line + label | ATR-based stop-loss |
+| **Risk zone** | Red shaded band | Entry → stop region |
+| **Target lines** | Green lines + "TP1/2/3 (xR)" labels | R-multiple take-profit targets |
+| **Reward zone** | Green shaded band | Entry → furthest target region |
+| **Summary table** | Bottom-right panel | ATR, entry, stop, R:R, risk amount, position size |
+
+---
+
+## Reading confluence
+
+The point of the suite is overlap. A high-probability long, for example, looks like:
+
+- A higher-timeframe **CHoCH/BoS** to the upside (structure)
+- Price retracing into an **unmitigated bullish Order Block** or **unfilled FVG** (location)
+- That zone aligning with the **Value Area Low** or a **POC** from below (value)
+- A **regular bullish divergence** or a **sell-side liquidity sweep** there (trigger)
+- A clean **ATR stop** beyond the zone with a favourable R-multiple to the next liquidity pool (risk)
+
+When several of these line up at the same price, the [Pro Confluence Engine](../pro/README.md) surfaces it as a single high score.
+
+---
+
+<a name="görsel-kılavuz-türkçe"></a>
+
+# Görsel Kılavuz (Türkçe)
+
+> Her göstergenin grafiğe çizdiğini nasıl okuyacağın. Göreceğin renkler, çizgiler, kutular ve etiketler için bir referans.
+
+> 📷 Açıklamalı ekran görüntüleri zamanla gösterge başına eklenir. Bir göstergenin görselleri gelene kadar aşağıdaki açıklamaları kullan — kodun çizdiğiyle birebir eşleşir.
+
+## SMC Toolkit
+- **BoS etiketi** — kırılımda küçük yeşil/kırmızı etiket: Yapı Kırılımı, trend devamı.
+- **CHoCH etiketi** — kırılımda küçük etiket: Karakter Değişimi, olası dönüş.
+- **Order Block** — yeşil (bullish) / kırmızı (bearish) kutu: kırılım öncesi son ters mum; giriş bölgesi.
+- **Mitige OB** — gri kutu: fiyat bölgeye dokundu, "tükendi".
+- **FVG** — aqua (bull) / turuncu (bear) kutu: 3-mum dengesizliği. Dolunca gri olur.
+- **Likidite çizgisi** — kesikli aqua/turuncu: eşit highs (BSL) / eşit lows (SSL).
+- **Sweep etiketi** — "BSL/SSL Swept": içeri geri kapanan stop-run.
+
+## Volume Profile Plus
+- **Histogram barları** — sağa yatay barlar: her fiyat satırında işlem gören hacim.
+- **POC çizgisi** — düz turuncu çizgi + etiket: en yüksek hacimli fiyat.
+- **VAH / VAL çizgileri** — kesikli çizgiler + etiketler: değer alanının üst/alt sınırı.
+- **Değer alanı gölgesi** — VAH ile VAL arası bant: POC çevresindeki yapılandırılabilir hacim oranı.
+- **HVN barları** (yeşil) — fiyat burada duraksar. **LVN barları** (kırmızı) — fiyat buradan hızlı geçer.
+
+## MTF Divergence Scanner
+- **Bull etiketi** — barın altında yeşil: "Reg/Hid Bull" + zaman dilimi.
+- **Bear etiketi** — barın üstünde kırmızı: "Reg/Hid Bear" + zaman dilimi.
+- **Durum tablosu** — sağ üst panel: zaman dilimi başına son uyumsuzluk yönü.
+- **"Reg"** — regular (dönüş), **"Hid"** — hidden (devam).
+
+## ATR Helper
+- **Giriş çizgisi** (mavi) — planlanan giriş. **Stop çizgisi** (kırmızı) — ATR stop.
+- **Risk bölgesi** (kırmızı bant) — giriş → stop. **Hedef çizgileri** (yeşil, "TP1/2/3 (xR)") — R-katlı hedefler.
+- **Ödül bölgesi** (yeşil bant) — giriş → en uzak hedef.
+- **Özet tablo** (sağ alt) — ATR, giriş, stop, R:R, risk tutarı, pozisyon büyüklüğü.
+
+## Konfluans okuma
+Paketin amacı örtüşmedir. Örneğin yüksek-olasılıklı bir long: yukarı yönlü üst-zaman-dilimi **CHoCH/BoS** (yapı) + **mitige olmamış bullish OB / dolmamış FVG**'ye geri çekilme (konum) + bu bölgenin **VAL** veya alttan bir **POC** ile hizalanması (değer) + orada **regular bullish uyumsuzluk** veya **satış-tarafı likidite sweep'i** (tetikleyici) + bölgenin ötesinde, sonraki likidite havuzuna iyi R-katlı **ATR stop** (risk). Bunlar aynı fiyatta hizalandığında [Pro Confluence Engine](../pro/README.md) bunu tek bir yüksek skor olarak gösterir.

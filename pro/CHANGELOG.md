@@ -1,5 +1,11 @@
 # Pro Confluence Engine — Changelog
 
+## Unreleased — Planned
+
+- Backtest report with statistical evidence across crypto, forex, and metals
+- Additional weight presets and an auto-tuning option
+- Session/volatility filter refinements
+
 ## v1.0.0 (2026-07-06)
 
 Initial release.

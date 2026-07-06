@@ -1,15 +1,54 @@
-# ---------------------------------------------------------------------------
-# Pro Confluence Engine source is proprietary (see LICENSE-PRO).
-# It is distributed ONLY via TradingView's invite-only system - never push
+# =============================================================================
+# SMC Pine Suite — .gitignore
+# =============================================================================
+# This repository contains Pine Script source (.pine), Markdown docs, and
+# images. There is no build step, so this ignore list mainly covers OS cruft,
+# editor metadata, and local scratch files.
+# =============================================================================
+
+# --- Pro Confluence Engine source is PROPRIETARY (see LICENSE-PRO) ----------
+# It is distributed ONLY via TradingView's invite-only system. NEVER push
 # Pine source under pro/ to this public repository.
-# ---------------------------------------------------------------------------
 pro/*.pine
 pro/src/
 
-# Editor / OS noise
-.vscode/
-.idea/
-*.swp
+# --- Operating system ---
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
 desktop.ini
-.DS_Store
+
+# --- Editors / IDEs ---
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.code-workspace
+*~
+*.swp
+*.swo
+
+# --- Local scratch / private notes (keep out of the public repo) ---
+scratch/
+notes/
+*.local.md
+TODO.local
+.env
+.env.*
+
+# --- Backtest exports & large binaries (attach to releases, don't commit) ---
+*.csv
+*.zip
+*.tar.gz
+backtests/raw/
+
+# --- Pine / TradingView local exports ---
+*.pine.bak
+exports/
+
+# --- Logs ---
+*.log

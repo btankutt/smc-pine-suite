@@ -12,6 +12,12 @@ The Pro Confluence Engine is distributed **exclusively** through TradingView's i
 
 Launch pricing has not been announced yet — contact [@btankutt](https://github.com/btankutt) for current terms and early-access availability.
 
+| Plan | Best for | Price |
+|------|----------|-------|
+| **Monthly** | Trying it on your own markets | _contact for current pricing_ |
+| **Annual** | Committed users (best value) | _contact for current pricing_ |
+| **Lifetime** | One-time access, all future updates | _contact for current pricing_ |
+
 ## What you get
 
 - The Pro Confluence Engine indicator (see [FEATURES.md](FEATURES.md))

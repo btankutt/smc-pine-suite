@@ -1,0 +1,186 @@
+// =============================================================================
+// ATR Helper
+// =============================================================================
+// Author:      Baris Tankut (@btankutt)
+// Repository:  https://github.com/btankutt/smc-pine-suite
+// License:     MPL 2.0 (see LICENSE-FREE)
+// Created:     2026-06-17
+// Version:     1.0.2
+// -----------------------------------------------------------------------------
+// ATR-based trade planning tool for TradingView:
+//   - Dynamic stop-loss from an ATR multiple
+//   - Up to three take-profit targets defined as R multiples
+//   - Risk / reward visualization (shaded risk and reward zones)
+//   - Position sizing from account size, risk %, and stop distance
+//
+// Plan a trade by setting direction and entry; the script draws the stop, the
+// targets, the R:R for each, and the position size that keeps risk at your
+// chosen percentage of the account.
+//
+// Disclaimer: Educational tool, not financial advice. Past performance does
+// not guarantee future results. Always backtest and use proper risk management.
+// =============================================================================
+
+//@version=6
+indicator("ATR Helper [btankutt]", overlay=true, max_lines_count=500, max_boxes_count=500, max_labels_count=500)
+
+// =============================================================================
+// CONSTANTS
+// =============================================================================
+int TABLE_ROWS = 9
+
+// Input group names
+GRP_ATR  = "ATR"
+GRP_TRD  = "Trade Setup"
+GRP_TP   = "Take Profit (R multiples)"
+GRP_RISK = "Position Sizing"
+GRP_DISP = "Display"
+
+// =============================================================================
+// USER INPUTS
+// =============================================================================
+// Group 1 - ATR
+int    atr_len    = input.int(14, "ATR length", minval=1, maxval=200, group=GRP_ATR)
+string atr_smooth = input.string("RMA", "ATR smoothing", options=["RMA", "SMA", "EMA", "WMA"], group=GRP_ATR)
+float  sl_mult    = input.float(1.5, "Stop-loss ATR multiple", minval=0.1, maxval=20.0, step=0.1, group=GRP_ATR)
+
+// Group 2 - Trade setup
+string direction  = input.string("Long", "Direction", options=["Long", "Short"], group=GRP_TRD)
+string entry_mode = input.string("Current close", "Entry price", options=["Current close", "Manual"], group=GRP_TRD)
+float  manual_entry = input.float(0.0, "Manual entry price", minval=0.0, group=GRP_TRD)
+
+// Group 3 - Take profit targets (as multiples of the risk distance)
+bool  tp1_on = input.bool(true,  "TP1", inline="tp1", group=GRP_TP)
+float tp1_r  = input.float(1.0, "", inline="tp1", group=GRP_TP)
+bool  tp2_on = input.bool(true,  "TP2", inline="tp2", group=GRP_TP)
+float tp2_r  = input.float(2.0, "", inline="tp2", group=GRP_TP)
+bool  tp3_on = input.bool(true,  "TP3", inline="tp3", group=GRP_TP)
+float tp3_r  = input.float(3.0, "", inline="tp3", group=GRP_TP)
+
+// Group 4 - Position sizing
+bool   sizing_on   = input.bool(true, "Show position sizing", group=GRP_RISK)
+float  account_sz  = input.float(10000.0, "Account size", minval=0.0, group=GRP_RISK)
+float  risk_pct    = input.float(1.0, "Risk per trade (%)", minval=0.01, maxval=100.0, step=0.1, group=GRP_RISK)
+float  point_value = input.float(1.0, "Value per 1.0 price move (per unit)", minval=0.0000001, group=GRP_RISK, tooltip="1 for crypto/stocks quoted in account currency. Adjust for futures/FX contract value.")
+
+// Group 5 - Display
+bool  show_table  = input.bool(true, "Show summary table", group=GRP_DISP)
+color sl_color    = input.color(color.new(color.red, 0),   "Stop color", group=GRP_DISP)
+color tp_color    = input.color(color.new(color.green, 0), "Target color", group=GRP_DISP)
+color entry_color = input.color(color.new(color.blue, 0),  "Entry color", group=GRP_DISP)
+int   zone_transp = input.int(85, "Zone transparency", minval=0, maxval=100, group=GRP_DISP)
+
+// =============================================================================
+// ATR
+// =============================================================================
+float atr_value = switch atr_smooth
+    "SMA" => ta.sma(ta.tr(true), atr_len)
+    "EMA" => ta.ema(ta.tr(true), atr_len)
+    "WMA" => ta.wma(ta.tr(true), atr_len)
+    => ta.rma(ta.tr(true), atr_len)
+
+// =============================================================================
+// TRADE MATH
+// =============================================================================
+int   dir       = direction == "Long" ? 1 : -1
+float entry     = entry_mode == "Manual" and manual_entry > 0 ? manual_entry : close
+float stop_dist = atr_value * sl_mult
+float sl_price  = entry - dir * stop_dist
+
+// Take-profit prices from R multiples of the stop distance.
+float tp1_price = entry + dir * stop_dist * tp1_r
+float tp2_price = entry + dir * stop_dist * tp2_r
+float tp3_price = entry + dir * stop_dist * tp3_r
+
+// Position sizing: risk a fixed % of the account across the stop distance.
+float risk_amount = account_sz * risk_pct / 100.0
+float risk_per_unit = stop_dist * point_value
+float position_size = risk_per_unit > 0 ? risk_amount / risk_per_unit : na
+
+// =============================================================================
+// STATE
+// =============================================================================
+var array<line>  plan_lines  = array.new<line>()
+var array<box>   plan_boxes  = array.new<box>()
+var array<label> plan_labels = array.new<label>()
+
+clear_plan() =>
+    if plan_lines.size() > 0
+        for l in plan_lines
+            l.delete()
+        plan_lines.clear()
+    if plan_boxes.size() > 0
+        for b in plan_boxes
+            b.delete()
+        plan_boxes.clear()
+    if plan_labels.size() > 0
+        for lb in plan_labels
+            lb.delete()
+        plan_labels.clear()
+
+// Draw a level line plus a price label. The line ends at the last real bar and
+// uses extend.right (a stable horizontal ray); the label sits on the last bar.
+// This keeps both anchored to the chart when scrolling or zooming.
+draw_level(int x1, int x2, float price, color col, string txt) =>
+    line ln = line.new(x1, price, x2, price, extend=extend.right, color=col, width=2, style=line.style_solid)
+    plan_lines.push(ln)
+    label lb = label.new(x2, price, txt, style=label.style_label_left,
+                         color=col, textcolor=color.white, size=size.small)
+    plan_labels.push(lb)
+
+// =============================================================================
+// MAIN — draw the plan on the latest bar
+// =============================================================================
+if barstate.islast and stop_dist > 0
+    clear_plan()
+    // Anchor at the last real bar and extend right — no future bar offsets,
+    // so the zones and levels never drift on scroll/zoom.
+    int x1 = bar_index - 1
+    int x2 = bar_index
+
+    // Risk zone (entry -> stop), shaded red — extends right as a stable band.
+    box risk_box = box.new(x1, entry, x2, sl_price, extend=extend.right,
+                           border_color=color.new(sl_color, 100),
+                           bgcolor=color.new(sl_color, zone_transp))
+    plan_boxes.push(risk_box)
+
+    // Reward zone (entry -> furthest enabled target), shaded green.
+    float top_tp = tp3_on ? tp3_price : tp2_on ? tp2_price : tp1_on ? tp1_price : entry
+    box reward_box = box.new(x1, entry, x2, top_tp, extend=extend.right,
+                             border_color=color.new(tp_color, 100),
+                             bgcolor=color.new(tp_color, zone_transp))
+    plan_boxes.push(reward_box)
+
+    // Levels.
+    draw_level(x1, x2, entry,    entry_color, "Entry " + str.tostring(entry, format.mintick))
+    draw_level(x1, x2, sl_price, sl_color,    "SL " + str.tostring(sl_price, format.mintick))
+    if tp1_on
+        draw_level(x1, x2, tp1_price, tp_color, "TP1 (" + str.tostring(tp1_r, "#.#") + "R) " + str.tostring(tp1_price, format.mintick))
+    if tp2_on
+        draw_level(x1, x2, tp2_price, tp_color, "TP2 (" + str.tostring(tp2_r, "#.#") + "R) " + str.tostring(tp2_price, format.mintick))
+    if tp3_on
+        draw_level(x1, x2, tp3_price, tp_color, "TP3 (" + str.tostring(tp3_r, "#.#") + "R) " + str.tostring(tp3_price, format.mintick))
+
+// =============================================================================
+// SUMMARY TABLE
+// =============================================================================
+var table panel = table.new(position.bottom_right, 2, TABLE_ROWS, border_width=1)
+
+put_row(int row, string k, string v) =>
+    table.cell(panel, 0, row, k, text_color=color.white, bgcolor=color.new(color.black, 20), text_size=size.small, text_halign=text.align_left)
+    table.cell(panel, 1, row, v, text_color=color.white, bgcolor=color.new(color.gray, 40),  text_size=size.small, text_halign=text.align_right)
+
+if show_table and barstate.islast and stop_dist > 0
+    put_row(0, "ATR(" + str.tostring(atr_len) + ")", str.tostring(atr_value, format.mintick))
+    put_row(1, "Direction", direction)
+    put_row(2, "Entry", str.tostring(entry, format.mintick))
+    put_row(3, "Stop", str.tostring(sl_price, format.mintick))
+    put_row(4, "Risk (price)", str.tostring(stop_dist, format.mintick))
+    put_row(5, "TP1 R:R", tp1_on ? "1 : " + str.tostring(tp1_r, "#.#") : "—")
+    put_row(6, "TP3 R:R", tp3_on ? "1 : " + str.tostring(tp3_r, "#.#") : "—")
+    put_row(7, "Risk amount", sizing_on ? str.tostring(risk_amount, "#.##") : "—")
+    put_row(8, "Position size", sizing_on and not na(position_size) ? str.tostring(position_size, "#.######") : "—")
+
+// =============================================================================
+// ALERTS
+// ====================
