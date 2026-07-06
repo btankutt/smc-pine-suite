@@ -15,11 +15,11 @@ A clean, modern Pine Script v6 implementation of standard Smart Money Concepts i
 - Use SMC frameworks (Inner Circle Trader, ICT, etc.) and want everything in one indicator
 - Need clean visuals (mitigated zones turn gray, capped display counts)
 - Trade across timeframes (works on any timeframe from 1M to 1W)
-- Want a non-repainting tool (uses confirmed pivots + time-based coordinates)
+- Want a non-repainting tool (confirmed pivots + all signals finalized at bar close)
 
 **Pine Script v6 features used:**
 - User-defined types for clean state management
-- Time-based xloc for zoom-stable drawings
+- Confirmed-bar gating (`barstate.isconfirmed`) — no intrabar phantom signals
 - Dot-notation methods for readability
 - Strict typing throughout
 
@@ -38,6 +38,7 @@ A clean, modern Pine Script v6 implementation of standard Smart Money Concepts i
 
 **Notes:**
 - Pivots have a `swing_length` bar confirmation delay (required to avoid lookahead bias)
+- Alerts fire on confirmed bars only — use "Once Per Bar Close" frequency
 - This is part of [SMC Pine Suite](https://github.com/btankutt/smc-pine-suite) on GitHub — full source, screenshots, and additional indicators available there
 - Open source under MPL 2.0
 
@@ -60,12 +61,12 @@ Standart Akıllı Para Konseptleri (SMC)'nin tek bir göstergede modern Pine Scr
 **Şu tradeler için tasarlandı:**
 - SMC çerçevelerini kullananlar (Inner Circle Trader, ICT, vb.) ve tek göstergede her şeyi isteyenler
 - Temiz görsele ihtiyaç duyanlar (mitige edilen bölgeler gri olur, gösterim sayısı sınırlı)
-- Çoklu zaman dilimlerinde işlem yapanlar (1D'den 1W'a kadar)
-- Repaint etmeyen bir araç isteyenler (onaylı pivot'lar + zaman-tabanlı koordinatlar kullanır)
+- Çoklu zaman dilimlerinde işlem yapanlar (1M'den 1W'a kadar her zaman diliminde çalışır)
+- Repaint etmeyen bir araç isteyenler (onaylı pivot'lar + bar kapanışında kesinleşen sinyaller)
 
 **Pine Script v6 özellikleri:**
 - Temiz state yönetimi için user-defined types
-- Zoom-stable çizimler için time-based xloc
+- Onaylı-bar kapılama (`barstate.isconfirmed`) — bar-içi hayalet sinyal yok
 - Okunabilirlik için dot-notation methodları
 - Strict typing
 
@@ -84,6 +85,7 @@ Standart Akıllı Para Konseptleri (SMC)'nin tek bir göstergede modern Pine Scr
 
 **Notlar:**
 - Pivot'lar `swing_length` bar onay gecikmesine sahiptir (lookahead bias'ı önlemek için gerekli)
+- Alarmlar yalnızca onaylı barlarda tetiklenir — "Once Per Bar Close" frekansını kullanın
 - Bu, GitHub'daki [SMC Pine Suite](https://github.com/btankutt/smc-pine-suite) paketinin parçasıdır — tam kaynak kod, ekran görüntüleri ve ek göstergeler orada
 - MPL 2.0 ile açık kaynak
 

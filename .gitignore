@@ -1,0 +1,15 @@
+# ---------------------------------------------------------------------------
+# Pro Confluence Engine source is proprietary (see LICENSE-PRO).
+# It is distributed ONLY via TradingView's invite-only system - never push
+# Pine source under pro/ to this public repository.
+# ---------------------------------------------------------------------------
+pro/*.pine
+pro/src/
+
+# Editor / OS noise
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+desktop.ini
+.DS_Store

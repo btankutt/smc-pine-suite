@@ -17,7 +17,7 @@ A standalone SMC indicator implementing standard, public-domain concepts used by
 
 Each component runs independently — you can toggle features on/off via inputs. Mitigated Order Blocks and filled FVGs are automatically recolored gray so the chart stays uncluttered.
 
-This indicator is part of [SMC Pine Suite](../../README.md). Built with Pine Script v6 features: user-defined types, methods (dot notation), and time-based xloc for zoom-stable drawings.
+This indicator is part of [SMC Pine Suite](../../README.md). Built with Pine Script v6 features: user-defined types, methods (dot notation), and confirmed-bar gating for repaint-safe signals.
 
 ---
 
@@ -38,8 +38,8 @@ When a BoS occurs, the indicator scans backward for the last opposite-color cand
 
 - Bullish OBs (formed before upside breaks) drawn in green
 - Bearish OBs (formed before downside breaks) drawn in red
-- Maximum displayed count is configurable (default: 5 per direction)
-- OBs touched by price are marked as mitigated and recolored gray
+- Maximum displayed count is configurable (default: 5 total, shared across both directions)
+- OBs touched by price on a later bar are marked as mitigated, recolored gray, and stop extending right
 
 ### 3. Fair Value Gaps
 
@@ -57,7 +57,7 @@ Tracks equal-highs and equal-lows within an ATR-scaled tolerance, forming liquid
 - **Buy-side liquidity (BSL)** — equal highs above price (short stops cluster here)
 - **Sell-side liquidity (SSL)** — equal lows below price (long stops cluster here)
 
-A sweep occurs when price wicks beyond a level then closes back inside. Sweep labels mark the event.
+A sweep occurs when price wicks beyond a level then closes back inside. Sweep labels mark the event. A level that price *closes* through cleanly is silently invalidated instead (a broken level is no longer resting liquidity), and consumed levels are grayed out and frozen so live liquidity is always distinguishable.
 
 ### 5. Six Alert Conditions
 
@@ -67,7 +67,7 @@ Each major event triggers a separate alert:
 - CHoCH Bullish / CHoCH Bearish
 - BSL Swept / SSL Swept
 
-Configure alerts via TradingView's "Create Alert" dialog after adding the indicator to your chart.
+Configure alerts via TradingView's "Create Alert" dialog after adding the indicator to your chart. All alert flags are set on confirmed bars only — recommended frequency: **Once Per Bar Close**.
 
 ---
 
@@ -89,12 +89,11 @@ All inputs are grouped in the indicator settings dialog:
 
 ### Structure
 - `Swing detection length` (default: 5) — Pivot left/right length. Lower values = more sensitive, but noisier.
-- `Show internal structure` (default: false) — Reserved for future use
-- `Show external structure` (default: true) — Toggle BoS/CHoCH labels
+- `Show structure labels` (default: true) — Toggle BoS/CHoCH labels
 
 ### Order Blocks
 - `Enable Order Blocks` (default: true)
-- `Max OBs to display` (default: 5) — Older OBs auto-removed when limit reached
+- `Max OBs to display (total)` (default: 5) — Shared across both directions; older OBs auto-removed when the limit is reached
 - `Filter by volume` (default: true) — Only OBs with above-average volume kept
 - `Bullish/Bearish OB color` — Customize colors and transparency
 
@@ -106,7 +105,8 @@ All inputs are grouped in the indicator settings dialog:
 
 ### Liquidity
 - `Enable Liquidity` (default: true)
-- `Equal highs/lows lookback` (default: 50) — Historical bars to scan
+- `Max liquidity levels` (default: 10) — Older levels auto-removed when the limit is reached
+- `Equal highs/lows lookback (bars)` (default: 50) — A new pivot only forms a liquidity level with prior pivots at most this many bars old
 - `Tolerance (ATR multiplier)` (default: 0.2) — How close must highs/lows be to count as equal
 
 ### Display
@@ -135,7 +135,8 @@ This indicator uses several Pine Script v6 features that improve over v5:
 
 - **User-defined types** — `OrderBlock`, `FVG`, `LiquidityLevel` structs keep logical state organized
 - **Method syntax (dot notation)** — `arr.push()`, `box.delete()`, `ref.set_bgcolor()` for cleaner code
-- **Time-based xloc** — Drawings remain anchored when zooming (uses `xloc.bar_time` instead of bar indices)
+- **Confirmed-bar gating** — every state update, drawing, and alert flag sits under `barstate.isconfirmed`, so realtime output always matches a historical recalculation
+- **Creation-bar guards** — objects store the bar they were created on and are never evaluated against that bar's own range (prevents self-mitigation/self-fill artifacts)
 - **Strict boolean typing** — `trend_initialized` flag pattern avoids Pine v6's bool-cannot-be-na rule
 - **Magic numbers in constants** — All thresholds named: `ATR_LENGTH`, `VOLUME_SMA_LENGTH`, `OB_LOOKBACK_BARS`, `PIVOT_BUFFER_SIZE`
 
@@ -179,7 +180,22 @@ Default `swing_length = 5` works well on 1H and higher timeframes. For 15M or lo
 
 - **Compile time:** ~1-2 seconds on most charts
 - **Memory:** Bounded by `max_boxes_count=500`, `max_lines_count=500`, `max_labels_count=500`
-- **Repainting:** None. Pivot-based detection waits for confirmation, drawings use time-based coordinates.
+- **Repainting:** No historical repainting — pivots confirm after `swing_length` bars, and all signals/drawings finalize at bar close (`barstate.isconfirmed` gating). Use "Once Per Bar Close" alert frequency.
+
+---
+
+## Changelog
+
+### v1.1.0 (2026-07-06)
+- **Fixed:** FVGs were marked filled on their creation bar (fill tracking was 100% non-functional); Order Blocks were mitigated on their own creation bar in gapless markets. Objects now carry a creation-bar guard.
+- **Fixed:** `Equal highs/lows lookback` input was declared but never used — it now genuinely bounds pivot matching age.
+- **Fixed:** all state updates and alert flags gated on `barstate.isconfirmed` (no intrabar phantom signals).
+- **Added:** dedicated `Max liquidity levels` input (was silently coupled to OB + FVG caps).
+- **Added:** liquidity levels invalidate on a clean close-through; consumed levels/zones are grayed and stop extending right.
+- **Removed:** dead `Show internal structure` input.
+
+### v1.0.0 (2026-05-15)
+- Initial release.
 
 ---
 

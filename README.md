@@ -36,7 +36,9 @@ For a more comprehensive confluence system that integrates all four free indicat
 
 | Indicator | Purpose | Status |
 |-----------|---------|--------|
-| [Pro Confluence Engine](pro/) | All-in-one signal system combining the 4 free indicators with adaptive scoring | 🚧 Coming Soon |
+| [Pro Confluence Engine](pro/) | All-in-one signal system combining the 4 free indicator concepts with adaptive scoring | ✅ Built — invite-only |
+
+> The Pro Confluence Engine's source code is **not** in this repository (see [LICENSE-PRO](LICENSE-PRO)). It is distributed exclusively through TradingView's invite-only system; the [pro/](pro/) folder contains documentation only.
 
 ---
 
@@ -57,11 +59,11 @@ For detailed documentation per indicator, see the README inside each folder.
 
 All indicators use Pine Script v6 — TradingView's current major version, released November 2024. Key v6 features used in this suite:
 
-- **Dynamic `request.*()`** for multi-symbol/timeframe scanning
-- **Short-circuit boolean evaluation** for efficient condition chains
 - **User-defined types** for clean state management
 - **Methods (dot notation)** for readable array/matrix operations
-- **Built-in `log.*()`** for debugging without polluting charts
+- **Confirmed-bar gating** (`barstate.isconfirmed`) for repaint-safe signals and alerts
+- **`request.security()`** with the confirmed-bar idiom for non-repainting HTF data (Pro Confluence Engine)
+- **Strict typing** throughout
 
 If you're still on v5, see TradingView's [official v6 migration guide](https://www.tradingview.com/pine-script-docs/migration-guides/to-pine-version-6/).
 
@@ -86,14 +88,14 @@ See [docs/trading-philosophy.md](docs/trading-philosophy.md) for the full doctri
 Already implemented and shipped:
 
 - [x] Repository structure and documentation framework
-- [x] SMC Toolkit — Order Blocks, FVG, Liquidity Sweeps, BoS/CHoCH ([details](indicators/01-smc-toolkit/))
+- [x] SMC Toolkit v1.1.0 — Order Blocks, FVG, Liquidity Sweeps, BoS/CHoCH ([details](indicators/01-smc-toolkit/))
+- [x] Pro Confluence Engine v1.0.0 — adaptive confluence scoring; invite-only, source not in repo ([docs](pro/))
 
 Planned future additions:
 
 - [ ] Volume Profile Plus (Session-based with POC/VAH/VAL)
 - [ ] MTF Divergence Scanner (RSI/MACD across timeframes)
 - [ ] ATR Helper (Dynamic SL/TP and R:R visualization)
-- [ ] Pro Confluence Engine (combines all four; invite-only)
 - [ ] Comprehensive backtest results and statistical evidence
 - [ ] Trading strategy companion guides (per indicator)
 
